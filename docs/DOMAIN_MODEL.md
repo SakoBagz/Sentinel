@@ -1,6 +1,6 @@
 # Sentinel Domain Model
 
-Status: Phase 12 implementation baseline
+Status: Phase 13 implementation baseline
 Date: 2026-08-12
 
 ## Core terms
@@ -93,9 +93,9 @@ SimulationRun
  └─ Debrief*
 ```
 
-`MissionVehicle` is the proposed association omitted from the master's minimum table
-list. It lets a mission own a fleet independent of route assignment. If not approved,
-the schema must define another authoritative membership mechanism.
+`MissionVehicle` is the implemented association omitted from the master's minimum
+table list. It lets a mission own a fleet independent of route assignment and is the
+authoritative mission-scoped membership mechanism.
 
 ## State-machine rules
 

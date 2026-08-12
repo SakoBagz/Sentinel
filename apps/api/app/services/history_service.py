@@ -3,8 +3,22 @@ from uuid import UUID
 from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models.entities import MissionEvent, TelemetrySample
+from app.db.models.entities import MissionEvent, SimulationRun, TelemetrySample
 from app.services.run_service import get_run
+
+
+async def run_snapshot(session: AsyncSession, run_id: UUID) -> tuple[SimulationRun, list[TelemetrySample | None]]:
+    run = await get_run(session, run_id)
+    latest: list[TelemetrySample | None] = []
+    for vehicle in run.run_vehicles:
+        result = await session.execute(
+            select(TelemetrySample)
+            .where(TelemetrySample.run_id == run_id, TelemetrySample.vehicle_id == vehicle.id)
+            .order_by(TelemetrySample.sim_time_ms.desc(), TelemetrySample.sequence.desc())
+            .limit(1)
+        )
+        latest.append(result.scalar_one_or_none())
+    return run, latest
 
 
 async def telemetry_page(

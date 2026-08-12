@@ -1,6 +1,6 @@
 # Sentinel REST API Contract
 
-Status: Phase 11 implementation baseline
+Status: Phase 13 implementation baseline
 Date: 2026-08-12
 
 ## Conventions
@@ -81,10 +81,11 @@ identifier.
 | POST | `/api/missions/{mission_id}/runs` | Create an immutable run snapshot |
 | GET | `/api/runs/{run_id}` | Retrieve run status and configuration |
 | GET | `/api/runs/{run_id}/vehicles` | Retrieve run-scoped vehicle identities |
+| GET | `/api/runs/{run_id}/snapshot` | Retrieve bounded current/final telemetry for reconnect |
 | POST | `/api/runs/{run_id}/start` | Start simulation |
 | POST | `/api/runs/{run_id}/pause` | Pause simulation |
 | POST | `/api/runs/{run_id}/resume` | Resume simulation |
-| POST | `/api/runs/{run_id}/stop` | Stop/abort an active run (proposed semantics) |
+| POST | `/api/runs/{run_id}/stop` | Stop/abort an active run |
 
 Creating a run records the seed and configuration. If no seed is supplied, the server
 generates one and returns it. Starting a run is idempotent for an already-running run
@@ -194,10 +195,11 @@ When `PUBLIC_DEMO=true`, the server enforces `MAX_VEHICLES=50`,
 `MAX_AI_QUESTIONS_PER_RUN=10`, and `MAX_TELEMETRY_RATE_HZ=5`. The frontend may explain
 these limits but cannot be the enforcement point.
 
-## Contract questions to resolve
+## Remaining API hardening
 
-- Confirm whether `POST /stop` is named stop or abort in the final domain API.
-- Confirm whether mission status is a direct lifecycle or a projection of its latest
-  run.
-- Define session identity/rate limiting for anonymous public demo users.
-- Decide whether REST uses cursor-only pagination or supports offset for small lists.
+- `POST /stop` is the public command name and transitions a run to `ABORTED`.
+- Mission and run status are separate lifecycles.
+- Anonymous session identity/rate-limit storage remains a deployment concern for the
+  public hosted profile.
+- Mission, event, and telemetry history use bounded cursor pagination; offsets are
+  intentionally not part of the MVP contract.

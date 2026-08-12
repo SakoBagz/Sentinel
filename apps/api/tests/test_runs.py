@@ -30,6 +30,10 @@ def test_run_creation_and_deterministic_completion(client) -> None:
     assert run["status"] == "READY"
     assert run["random_seed"] == 1234
     assert UUID(run["vehicles"][0]["id"])
+    snapshot = client.get(f"/api/runs/{run['id']}/snapshot")
+    assert snapshot.status_code == 200
+    assert snapshot.json()["sim_time_ms"] == 0
+    assert snapshot.json()["vehicles"][0]["telemetry"] is None
 
     started = client.post(f"/api/runs/{run['id']}/start")
     assert started.status_code == 200

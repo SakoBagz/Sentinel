@@ -1,6 +1,6 @@
 # Sentinel Realtime Architecture
 
-Status: Phase 11 implementation baseline
+Status: Phase 13 implementation baseline
 Date: 2026-08-12
 
 ## Role of Redis/Valkey
@@ -96,9 +96,10 @@ The client and server support heartbeat/ping, graceful disconnect, cleanup, boun
 exponential reconnect backoff, and subscription restoration. The web UI exposes
 `LIVE`, `RECONNECTING`, and `DISCONNECTED` as text plus non-color indicators.
 
-On reconnect, the client restores topic subscriptions and receives current state from
-the live stream or a bounded REST snapshot. Historical gaps are obtained from REST,
-not by assuming that a disconnected WebSocket retained all messages.
+On reconnect, the client restores topic subscriptions and hydrates current state from
+`GET /api/runs/{run_id}/snapshot` before consuming the live stream. Historical gaps
+are obtained from REST, not by assuming that a disconnected WebSocket retained all
+messages.
 
 ## Browser live store
 
@@ -129,9 +130,13 @@ counters; active WebSocket connections; end-to-end telemetry latency; event proc
 latency; simulation tick duration; stream consumer lag; and database batch-write
 duration.
 
-## Phase 0 questions
+## Remaining realtime hardening
 
 - Choose Redis consumer-group names and pending-entry reclaim policy.
-- Define the reconnect snapshot endpoint/shape.
-- Decide whether WebSocket subscriptions may be changed after initial subscribe.
+- WebSocket subscriptions are restored on reconnect; changing subscriptions after the
+  initial subscribe is deferred until a product surface needs it.
 - Set maximum per-message and per-batch sizes before Phase 4.
+
+The reconnect snapshot endpoint and response shape are implemented as
+`GET /api/runs/{run_id}/snapshot` and return the latest bounded telemetry state for
+each run vehicle.

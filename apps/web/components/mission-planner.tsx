@@ -90,7 +90,8 @@ export function MissionPlanner({ missionId }: Props) {
     if (!map || !mission) return;
     for (const marker of markersRef.current) marker.remove();
     markersRef.current = mission.waypoints.map((waypoint) => {
-      const marker = new maplibregl.Marker({ color: "#53c7a3" })
+    const marker = new maplibregl.Marker({ color: "#53c7a3" })
+      .setDraggable(true)
         .setLngLat([waypoint.longitude, waypoint.latitude])
         .setPopup(new maplibregl.Popup().setText(`Waypoint ${waypoint.sequence + 1} · ${waypoint.action}`))
         .addTo(map);
@@ -98,8 +99,45 @@ export function MissionPlanner({ missionId }: Props) {
         setSelectedWaypointId(waypoint.id);
         setSelectedVehicle(waypoint.vehicle_id ?? "");
       });
+      marker.on("dragend", () => {
+        const position = marker.getLngLat();
+        setMission((current) => current && ({
+          ...current,
+          waypoints: current.waypoints.map((item) => item.id === waypoint.id ? { ...item, latitude: position.lat, longitude: position.lng } : item),
+        }));
+      });
       return marker;
     });
+  }, [mission]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !mission) return;
+    const updateRoutes = () => {
+      if (!map.isStyleLoaded()) return;
+      const byVehicle = new Map<string, Waypoint[]>();
+      for (const waypoint of [...mission.waypoints].sort((left, right) => left.sequence - right.sequence)) {
+        if (!waypoint.vehicle_id) continue;
+        byVehicle.set(waypoint.vehicle_id, [...(byVehicle.get(waypoint.vehicle_id) ?? []), waypoint]);
+      }
+      const features = [...byVehicle.entries()]
+        .filter(([, waypoints]) => waypoints.length > 1)
+        .map(([vehicleId, waypoints]) => ({
+          type: "Feature" as const,
+          properties: { vehicleId },
+          geometry: { type: "LineString" as const, coordinates: waypoints.map((item) => [item.longitude, item.latitude]) },
+        }));
+      const sourceId = "sentinel-planner-routes";
+      const source = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
+      if (source) source.setData({ type: "FeatureCollection", features } as GeoJSON.FeatureCollection);
+      else {
+        map.addSource(sourceId, { type: "geojson", data: { type: "FeatureCollection", features } });
+        map.addLayer({ id: "sentinel-planner-routes-line", type: "line", source: sourceId, paint: { "line-color": "#53c7a3", "line-width": 3, "line-opacity": 0.8 } });
+      }
+    };
+    if (map.isStyleLoaded()) updateRoutes();
+    else map.once("load", updateRoutes);
+    return () => { map.off("load", updateRoutes); };
   }, [mission]);
 
   const saveMission = async () => {

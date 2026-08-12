@@ -1,7 +1,9 @@
+import base64
 from collections.abc import Sequence
+from datetime import datetime
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import and_, or_, select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select
@@ -43,9 +45,34 @@ async def get_mission(session: AsyncSession, mission_id: UUID) -> Mission:
     return mission
 
 
-async def list_missions(session: AsyncSession, limit: int = 50) -> Sequence[Mission]:
-    result = await session.execute((await _mission_query()).order_by(Mission.updated_at.desc()).limit(limit))
-    return result.scalars().all()
+def _encode_mission_cursor(mission: Mission) -> str:
+    value = f"{mission.updated_at.isoformat()}|{mission.id}"
+    return base64.urlsafe_b64encode(value.encode()).decode().rstrip("=")
+
+
+def _decode_mission_cursor(cursor: str) -> tuple[datetime, UUID]:
+    try:
+        padded = cursor + "=" * (-len(cursor) % 4)
+        timestamp, mission_id = base64.urlsafe_b64decode(padded.encode()).decode().split("|", 1)
+        return datetime.fromisoformat(timestamp), UUID(mission_id)
+    except (ValueError, TypeError, UnicodeDecodeError) as exc:
+        raise ValueError("Invalid mission cursor") from exc
+
+
+async def list_missions(session: AsyncSession, limit: int = 50, cursor: str | None = None) -> tuple[Sequence[Mission], str | None]:
+    query = (await _mission_query()).order_by(Mission.updated_at.desc(), Mission.id.desc())
+    if cursor is not None:
+        updated_at, mission_id = _decode_mission_cursor(cursor)
+        query = query.where(
+            or_(Mission.updated_at < updated_at, and_(Mission.updated_at == updated_at, Mission.id < mission_id))
+        )
+    result = await session.execute(query.limit(limit + 1))
+    missions = list(result.scalars().all())
+    next_cursor = None
+    if len(missions) > limit:
+        missions.pop()
+        next_cursor = _encode_mission_cursor(missions[-1])
+    return missions, next_cursor
 
 
 async def create_mission(session: AsyncSession, payload: MissionCreate) -> Mission:

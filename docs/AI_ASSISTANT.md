@@ -1,6 +1,6 @@
 # Sentinel AI Mission Analyst
 
-Status: Phase 11 implementation baseline
+Status: Phase 13 implementation baseline
 Date: 2026-08-12
 
 ## Role and boundary
@@ -156,8 +156,9 @@ evidence generation, unsupported questions, missing data, read-only constraints,
 structured-output validation, and provider-unavailable behavior. Live provider tests
 are manual or separately gated and never required for ordinary CI.
 
-## Phase 0 questions
+## Remaining AI hardening
 
-- Confirm the Gemini SDK and structured-output mode during Phase 8 dependency review.
+- The optional Gemini adapter uses the provider port and validates structured output;
+  provider-specific SDK changes remain isolated behind that adapter.
 - Define the exact quota/rate-limit storage mechanism for anonymous public sessions.
 - Decide whether generated debriefs are cached/reused by run and prompt version.

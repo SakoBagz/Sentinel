@@ -1,6 +1,6 @@
 # Sentinel Replay Architecture
 
-Status: Phase 11 implementation baseline
+Status: Phase 13 implementation baseline
 Date: 2026-08-12
 
 ## Principle
@@ -68,11 +68,12 @@ After a run completes, stop and restart the application. The mission and histori
 data must still exist. The user can open replay, play/pause, seek, change speed, and
 jump to an event. The simulation engine must not be invoked by any replay action.
 
-## Phase 0 questions
+## Replay implementation baselines
 
-- Confirm whether interpolation is performed by the backend or browser; baseline is
-  browser-side for visual state and server-side for data reduction.
-- Define the downsample algorithm and whether it is uniform, latest-value, or
-  event-aware.
-- Decide whether replay includes an explicit marker for transient messages that were
-  delivered live but not durably stored.
+- Interpolation is browser-side presentation logic; REST remains the source of
+  persisted samples and events.
+- History responses are bounded and cursor-paginated. Analyst telemetry uses a
+  bounded stride derived from the sampling hint; replay preserves the returned
+  persisted sampling policy.
+- Replay represents durable history only; transient live messages that were not
+  persisted are not presented as historical facts.

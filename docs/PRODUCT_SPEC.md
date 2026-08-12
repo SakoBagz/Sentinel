@@ -1,6 +1,6 @@
 # Sentinel Product Specification
 
-Status: Phase 12 implementation baseline
+Status: Phase 13 implementation baseline
 Date: 2026-08-12  
 Source: Sentinel Master Engineering Specification & Coding-Agent Constitution
 
@@ -112,27 +112,27 @@ activity rather than a claim about the public demo.
 - **Public demo:** an anonymous user can launch the seeded scenario, observe it,
   inject a safe failure, replay it, view metrics, and use AI when quota allows.
 
-## Phase 0 open questions and proposed baselines
+## Resolved contract baselines
 
-These are contract decisions to confirm before Phase 1 implementation:
+These baselines are implemented across the API, database, simulator, and web client:
 
 1. **Mission vehicle membership.** The master minimum table list has no explicit
    mission-to-vehicle join table. This baseline defines a `mission_vehicles` join
    table in the database design and uses its ID for mission-scoped waypoint/API
    references; it is the cleanest way to support a vehicle with no waypoint yet. If
-   the owner rejects it, the schema must document an alternative before migrations
-   are written.
+   migrations and API schemas use that association as the authoritative membership
+   mechanism.
 2. **Mission versus run status.** Mission is reusable, while a run is one execution.
    This baseline treats `MissionStatus` as the reusable definition lifecycle and
    `RunStatus` as the execution lifecycle, while retaining the master's state values
-   where applicable. The exact public response shape needs owner confirmation.
+   where applicable. Public responses use the typed schemas documented in `API.md`.
 3. **Run-scoped vehicle IDs.** This baseline uses `run_vehicles.id` for telemetry,
    event, and API references within a run; `vehicle_definition_id` points to the
    reusable static definition. This prevents ambiguity across repeated runs.
 4. **Telemetry event identity.** The envelope requires `event_id`, but the minimum
    telemetry table omits it. This baseline stores it in `telemetry_samples` in the
-   next schema revision while retaining `(run_id, vehicle_id, sequence)` as the
-   durable idempotency key.
+   durable storage while retaining `(run_id, vehicle_id, sequence)` as the idempotency
+   key.
 5. **Stop semantics.** `POST /runs/{run_id}/stop` transitions an active run to
    `ABORTED`; normal completion remains simulator-driven. The coordinator observes the
    command and stops progression without overwriting the abort with completion.

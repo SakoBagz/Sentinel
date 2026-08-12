@@ -61,3 +61,15 @@ def test_duplicate_waypoint_sequence_is_rejected(client) -> None:
     assert client.post(f"/api/missions/{mission['id']}/waypoints", json=payload).status_code == 201
     assert client.post(f"/api/missions/{mission['id']}/waypoints", json=payload).status_code == 409
 
+
+def test_mission_list_cursor_is_stable_and_bounded(client) -> None:
+    for index in range(3):
+        assert client.post("/api/missions", json={"name": f"Cursor mission {index}"}).status_code == 201
+    first = client.get("/api/missions?limit=1")
+    assert first.status_code == 200
+    assert len(first.json()["items"]) == 1
+    assert first.json()["next_cursor"]
+    second = client.get(f"/api/missions?limit=1&cursor={first.json()['next_cursor']}")
+    assert second.status_code == 200
+    assert len(second.json()["items"]) == 1
+    assert second.json()["items"][0]["id"] != first.json()["items"][0]["id"]

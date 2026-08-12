@@ -197,6 +197,18 @@ class TelemetryRead(APIModel):
     communications_state: str | None
 
 
+class SnapshotVehicleRead(APIModel):
+    id: UUID
+    callsign: str
+    telemetry: TelemetryRead | None = None
+
+
+class RunSnapshotRead(APIModel):
+    run_id: UUID
+    sim_time_ms: int
+    vehicles: list[SnapshotVehicleRead] = Field(default_factory=list)
+
+
 class EventRead(APIModel):
     id: UUID
     run_id: UUID

@@ -1,6 +1,6 @@
 # Sentinel Simulation Architecture
 
-Status: Phase 11 implementation baseline
+Status: Phase 13 implementation baseline
 Date: 2026-08-12
 
 ## Purpose
@@ -152,11 +152,9 @@ domain.
 
 ## Completion
 
-A run completes when all participating vehicles reach their terminal route outcome or
-when a configured mission duration ends under an explicit policy. The completion
-policy must be chosen before Phase 3; the baseline is all vehicles terminal, with a
-duration cap producing a normal result plus warnings rather than silently extending
-the run.
+A run completes normally when all participating vehicles reach their terminal route
+outcome. A configured mission duration cap aborts an otherwise active run with the
+run's persisted warnings and events; it never silently extends the simulation.
 
 ## Simulation tests
 
@@ -166,10 +164,10 @@ repeated runs, deterministic network behavior, delayed delivery, duplicates, seq
 gaps, outage/recovery, and the invariant that communications loss does not freeze the
 simulation.
 
-## Phase 0 questions
+## Simulation implementation baselines
 
-- Confirm whether the run duration cap ends a run as `COMPLETED` with incomplete
-  vehicles or `ABORTED`.
-- Define the exact battery consumption units and default coefficients before Phase 3.
-- Define whether `HOLD` has a duration or remains until an external action; MVP should
-  use a finite configured hold duration.
+- A duration cap ends an otherwise active run as `ABORTED`; normal completion requires
+  all participating vehicles to reach terminal route outcomes.
+- Battery drain is expressed as percentage points per simulated second using the
+  configured base and speed coefficients.
+- `HOLD` is a finite one-second route action in the MVP.

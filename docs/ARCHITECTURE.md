@@ -1,6 +1,6 @@
 # Sentinel Architecture
 
-Status: Phase 11 implementation baseline
+Status: Phase 13 implementation baseline
 Date: 2026-08-12
 
 ## Architectural style
@@ -151,9 +151,9 @@ environment configuration.
 7. AI has no mutation capability.
 8. Public limits are enforced server-side.
 
-## Phase 0 architecture decisions requiring confirmation
+## Implemented architecture decisions
 
-The proposed `mission_vehicles` association, run-scoped vehicle ID convention,
-durable telemetry event ID, and distinct mission/run status semantics are detailed in
-`PRODUCT_SPEC.md` and `DATABASE.md`. No migration or production implementation should
-begin until those contract points are accepted or revised in these docs.
+The `mission_vehicles` association, run-scoped vehicle ID convention, durable
+telemetry event ID, and distinct mission/run status semantics are implemented and
+documented in `PRODUCT_SPEC.md` and `DATABASE.md`. Revisions to these contracts
+require a migration or versioned API change.

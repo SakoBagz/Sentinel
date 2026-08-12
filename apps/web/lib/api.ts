@@ -89,8 +89,9 @@ async function request<T>(path: string, init?: RequestInit, schema?: z.ZodType<T
   return schema ? schema.parse(value) : (value as T);
 }
 
-export async function listMissions(): Promise<Mission[]> {
-  const value = await request<{ items: unknown[] }>("/api/missions");
+export async function listMissions(cursor?: string): Promise<Mission[]> {
+  const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
+  const value = await request<{ items: unknown[] }>(`/api/missions${query}`);
   return z.array(missionSchema).parse(value.items);
 }
 
@@ -130,6 +131,10 @@ export async function getRun(id: string): Promise<Run> {
   return request(`/api/runs/${id}`, undefined, runSchema);
 }
 
+export async function getRunSnapshot(id: string): Promise<RunSnapshot> {
+  return request(`/api/runs/${id}/snapshot`, undefined, runSnapshotSchema);
+}
+
 export async function startRun(id: string): Promise<Run> {
   return request(`/api/runs/${id}/start`, { method: "POST" }, runSchema);
 }
@@ -160,6 +165,9 @@ const telemetrySchema = z.object({
 const telemetryPageSchema = z.object({ items: z.array(telemetrySchema), next_cursor: z.string().nullable() });
 const eventSchema = z.object({ id: z.string(), run_id: z.string(), vehicle_id: z.string().nullable(), event_type: z.string(), severity: z.string(), schema_version: z.number(), sim_time_ms: z.number(), timestamp: z.string(), payload: z.record(z.string(), z.unknown()) });
 const eventPageSchema = z.object({ items: z.array(eventSchema), next_cursor: z.string().nullable() });
+const snapshotVehicleSchema = z.object({ id: z.string(), callsign: z.string(), telemetry: telemetrySchema.nullable() });
+const runSnapshotSchema = z.object({ run_id: z.string(), sim_time_ms: z.number(), vehicles: z.array(snapshotVehicleSchema) });
+export type RunSnapshot = z.infer<typeof runSnapshotSchema>;
 const metricsSchema = z.object({ run_id: z.string(), telemetry_messages_received: z.number(), telemetry_sequences_missing: z.number(), telemetry_sequences_duplicate: z.number(), telemetry_sequences_out_of_order: z.number(), event_count: z.number(), warning_count: z.number(), critical_count: z.number(), vehicle_count: z.number(), completed_vehicle_count: z.number(), mission_duration_ms: z.number(), communications_availability_percent: z.number(), telemetry_throughput_per_second: z.number(), latency_p50_ms: z.number(), latency_p95_ms: z.number(), latency_p99_ms: z.number() });
 export type TelemetrySample = z.infer<typeof telemetrySchema>;
 export type MissionEvent = z.infer<typeof eventSchema>;

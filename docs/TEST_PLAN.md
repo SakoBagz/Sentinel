@@ -1,6 +1,6 @@
 # Sentinel Test Plan
 
-Status: Phase 11 implementation baseline
+Status: Phase 13 implementation baseline
 Date: 2026-08-12
 
 ## Testing principles
@@ -35,8 +35,9 @@ out-of-order detection, and centralized event/severity mapping.
 
 Run against PostgreSQL/Redis test services and cover mission/run creation, transaction
 rollback, Alembic migrations, telemetry batch insertion, uniqueness/idempotency,
-event retrieval, replay queries, Redis reconnect, consumer retry, and WebSocket
-connect/subscribe/receive/disconnect/reconnect/subscription restoration.
+event retrieval, replay queries, bounded reconnect snapshots, Redis reconnect, consumer
+retry, and WebSocket connect/subscribe/receive/disconnect/reconnect/subscription
+restoration plus unknown-run rejection.
 
 ### Frontend unit tests
 
@@ -113,9 +114,11 @@ Load tests are separate from ordinary CI and are described in `PERFORMANCE.md`.
 Benchmark output is machine-readable and includes environment metadata. No performance
 number is published until produced by the benchmark script.
 
-## Phase 0 questions
+## Remaining test-plan hardening
 
-- Select the exact Python lint/type-check tools during Phase 1 dependency review.
-- Decide whether end-to-end CI runs Docker Compose services on every pull request or
-  uses a reduced in-process test profile.
-- Define minimum coverage thresholds after the first baseline suite exists.
+- Python tests use pytest; strict frontend TypeScript, Vitest, ESLint, and the
+  containerized production build are the current gates.
+- End-to-end CI can use Docker Compose services or a controlled reduced profile; the
+  local acceptance path uses the Compose stack.
+- Coverage thresholds remain a CI policy decision and are not used to hide or skip
+  functional tests.

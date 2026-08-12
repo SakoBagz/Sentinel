@@ -3,12 +3,32 @@ from uuid import UUID
 from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.api.schemas import EventPage, EventRead, MetricsRead, TelemetryPage, TelemetryRead
+from app.api.schemas import EventPage, EventRead, MetricsRead, RunSnapshotRead, SnapshotVehicleRead, TelemetryPage, TelemetryRead
 from app.db.session import get_db_session
 from app.services import history_service, metrics_service
 from app.services.run_service import RunNotFound
 
 router = APIRouter(prefix="/runs/{run_id}", tags=["history"])
+
+
+@router.get("/snapshot", response_model=RunSnapshotRead)
+async def snapshot(run_id: UUID, session: AsyncSession = Depends(get_db_session)) -> RunSnapshotRead:
+    try:
+        run, samples = await history_service.run_snapshot(session, run_id)
+        return RunSnapshotRead(
+            run_id=run_id,
+            sim_time_ms=max((sample.sim_time_ms for sample in samples if sample is not None), default=0),
+            vehicles=[
+                SnapshotVehicleRead(
+                    id=vehicle.id,
+                    callsign=vehicle.vehicle_definition.callsign,
+                    telemetry=TelemetryRead.model_validate(sample) if sample is not None else None,
+                )
+                for vehicle, sample in zip(run.run_vehicles, samples, strict=False)
+            ],
+        )
+    except RunNotFound as exc:
+        raise HTTPException(status_code=404, detail="Run not found") from exc
 
 
 @router.get("/telemetry", response_model=TelemetryPage)

@@ -50,10 +50,13 @@ async def create_mission(payload: MissionCreate, session: AsyncSession = Depends
 
 @router.get("", response_model=MissionList)
 async def list_missions(
-    limit: int = Query(default=50, ge=1, le=100), session: AsyncSession = Depends(get_db_session)
+    limit: int = Query(default=50, ge=1, le=100), cursor: str | None = Query(default=None), session: AsyncSession = Depends(get_db_session)
 ) -> MissionList:
-    missions = await mission_service.list_missions(session, limit)
-    return MissionList(items=[to_mission_read(mission) for mission in missions])
+    try:
+        missions, next_cursor = await mission_service.list_missions(session, limit, cursor)
+        return MissionList(items=[to_mission_read(mission) for mission in missions], next_cursor=next_cursor)
+    except ValueError as exc:
+        raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
 @router.get("/{mission_id}", response_model=MissionRead)

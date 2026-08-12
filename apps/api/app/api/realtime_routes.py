@@ -1,16 +1,28 @@
 import asyncio
 from uuid import UUID
 
-from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+from fastapi import APIRouter, Depends, WebSocket, WebSocketDisconnect
+from sqlalchemy.ext.asyncio import AsyncSession
 
+from app.db.session import get_db_session
 from app.realtime.hub import hub
+from app.services.run_service import RunNotFound, get_run
 
 router = APIRouter(tags=["realtime"])
 
 
 @router.websocket("/ws/runs/{run_id}")
-async def run_websocket(websocket: WebSocket, run_id: UUID) -> None:
+async def run_websocket(
+    websocket: WebSocket,
+    run_id: UUID,
+    db_session: AsyncSession = Depends(get_db_session),
+) -> None:
     await websocket.accept()
+    try:
+        await get_run(db_session, run_id)
+    except RunNotFound:
+        await websocket.close(code=4404, reason="Run not found")
+        return
     session = hub.connect(run_id)
     send_lock = asyncio.Lock()
 

@@ -1,6 +1,6 @@
 # Sentinel Frontend and UI Specification
 
-Status: Phase 11 implementation baseline
+Status: Phase 13 implementation baseline
 Date: 2026-08-12
 
 ## Product feel
@@ -29,9 +29,9 @@ waypoints, drag to reposition them, edit/delete/reorder route points, configure
 altitude/speed/return-battery/network profile, save, reload, and recover identical
 configuration.
 
-The map renders home/base positions, vehicle positions, waypoint markers, route
-polylines, and later survey regions. Map provider configuration is isolated from the
-mission domain.
+The map renders home/base positions, vehicle positions, waypoint markers, editable
+route polylines, and later survey regions. The live map adds planned routes and bounded
+completed trails. Map provider configuration is isolated from the mission domain.
 
 ## Live operations
 
@@ -125,9 +125,10 @@ historical/local UI context intact where possible.
 AI provider failure is shown as “Mission Analyst is temporarily unavailable. Core
 simulation and replay functionality remain operational.”
 
-## Phase 0 questions
+## Resolved interaction baselines
 
 - Confirm visual design tokens and typography before implementation.
 - Confirm whether planner route edits are optimistic or save-on-submit only; baseline
   is local edits followed by explicit save.
-- Define the exact API shape for current live vehicle snapshots on WebSocket reconnect.
+- Live reconnect state comes from `GET /api/runs/{run_id}/snapshot` before the
+  WebSocket subscription is restored.

@@ -1,6 +1,6 @@
 # Sentinel Database Design
 
-Status: Phase 11 implementation baseline
+Status: Phase 13 implementation baseline
 Date: 2026-08-12
 
 ## Persistence policy
@@ -15,8 +15,8 @@ in public demo mode; durable telemetry 2 Hz configurable; important events 100%.
 
 ## Relational model
 
-The following is the minimum schema from the master specification, with two proposed
-contract additions called out below.
+The following is the minimum schema from the master specification plus the contract
+additions required by the implemented API and realtime flows.
 
 ### `missions`
 
@@ -40,7 +40,7 @@ contract additions called out below.
 | `configuration` | JSONB, required, default `{}` |
 | `created_at`, `updated_at` | TIMESTAMPTZ, required |
 
-### Proposed `mission_vehicles`
+### `mission_vehicles`
 
 | Column | Type / constraint |
 |---|---|
@@ -51,19 +51,17 @@ contract additions called out below.
 | `configuration` | JSONB, required, default `{}` |
 | uniqueness | `(mission_id, vehicle_definition_id)` |
 
-This association is proposed because the master's minimum tables otherwise cannot
-represent a mission fleet independently of waypoint assignment. It needs approval
-before a Phase 1 migration.
+This association represents a mission fleet independently of waypoint assignment.
+Its ID is the authoritative mission-scoped vehicle reference for waypoints and
+mission APIs.
 
 ### `waypoints`
 
 Columns are `id` UUID primary key; `mission_id` UUID required and cascading;
 `vehicle_id` nullable; `sequence` integer required; latitude, longitude, and
 `altitude_m` required doubles; optional `target_speed_mps` and `arrival_radius_m`;
-and required `action`. The recommended baseline interprets `vehicle_id` as the
-mission-scoped `mission_vehicles.id`; the reusable static definition remains available
-through that association. If the proposed association is rejected, the replacement
-must define an equally authoritative mission-scoped identity. Add uniqueness on
+and required `action`. `vehicle_id` is the mission-scoped `mission_vehicles.id`; the
+reusable static definition remains available through that association. Add uniqueness on
 `(mission_id, vehicle_id, sequence)` and indexes for mission, vehicle, and sequence.
 
 ### `network_profiles`
@@ -92,15 +90,15 @@ run APIs. This prevents repeated mission runs from sharing dynamic identity.
 
 ### `telemetry_samples`
 
-Required fields are `id` BIGSERIAL primary key, proposed `event_id` UUID, `run_id` UUID,
+Required fields are `id` BIGSERIAL primary key, `event_id` UUID, `run_id` UUID,
 `vehicle_id` UUID referencing `run_vehicles`, `sequence` BIGINT, `sim_time_ms` BIGINT,
 `received_at` TIMESTAMPTZ, position/altitude doubles, heading/speed/battery doubles,
 and mission/communications state enums. Enforce uniqueness on
 `(run_id, vehicle_id, sequence)` and index `(run_id, sim_time_ms)` plus
 `(run_id, vehicle_id, sim_time_ms)`.
 
-The proposed `event_id` closes the master-spec gap between the telemetry envelope and
-durable storage. The sequence key remains the required idempotency constraint.
+`event_id` preserves the telemetry envelope identity in durable storage. The sequence
+key remains the required idempotency constraint.
 
 ### `mission_events`
 
@@ -142,15 +140,16 @@ explicit setting enables it.
 
 ## Migrations
 
-Phase 1 will use Alembic. Every schema change is a reviewed migration. The first
-migration must settle the proposed association table, run-scoped IDs, durable
-telemetry event IDs, enum enforcement, and delete behavior before implementation.
+Alembic owns reviewed schema migrations. The initial migration establishes the
+mission association table, run-scoped IDs, durable telemetry event IDs, enum
+enforcement, and delete behavior.
 
-## Unresolved schema decisions
+## Resolved schema decisions
 
-- Approve or reject `mission_vehicles`.
-- Confirm whether waypoints reference mission associations or reusable definitions.
-- Confirm whether `missions.status` is a projection of the latest run or a separate
-  definition lifecycle.
-- Confirm whether telemetry `event_id` is retained in durable storage (proposed: yes).
-- Decide whether JSONB configuration requires a documented schema version.
+- `mission_vehicles` is the mission-to-vehicle association.
+- Waypoints reference `mission_vehicles.id`; reusable definitions remain separate.
+- `missions.status` and `simulation_runs.status` are distinct definition and
+  execution lifecycles.
+- Telemetry retains `event_id` and is idempotent on `(run_id, vehicle_id, sequence)`.
+- JSONB configuration is treated as an immutable run snapshot after start; future
+  schema-versioned configuration changes require a migration and contract update.

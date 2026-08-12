@@ -6,6 +6,7 @@ from fastapi import FastAPI, HTTPException, Request
 from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.encoders import jsonable_encoder
 
 from app.api.health import router as health_router
 from app.api.mission_routes import router as mission_router
@@ -79,7 +80,7 @@ async def http_exception_handler(request: Request, exc: HTTPException) -> JSONRe
 
 @app.exception_handler(RequestValidationError)
 async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
-    return _error_response(request, 422, "VALIDATION_ERROR", "Request validation failed", {"fields": exc.errors()})
+    return _error_response(request, 422, "VALIDATION_ERROR", "Request validation failed", {"fields": jsonable_encoder(exc.errors())})
 
 
 @app.exception_handler(Exception)
