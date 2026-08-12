@@ -7,7 +7,7 @@ from app.api.schemas import FailureCreate
 from app.db.models.entities import FailureInjection
 from app.domain.enums import FailureType, RunStatus
 from app.realtime.runner import coordinator
-from app.services.run_service import RunConflict, RunNotFound, get_run
+from app.services.run_service import RunConflict, get_run
 
 
 class FailureNotFound(Exception):

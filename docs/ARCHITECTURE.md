@@ -1,6 +1,6 @@
 # Sentinel Architecture
 
-Status: Phase 13 implementation baseline
+Status: Phase 14 implementation baseline
 Date: 2026-08-12
 
 ## Architectural style
@@ -122,8 +122,9 @@ docs/
 apps/web/  apps/api/  simulator/  scripts/  infrastructure/
 ```
 
-The detailed directory layout is defined by the master specification. Phase 0 creates
-the docs and `AGENTS.md` only; Phase 1 will create the executable skeleton.
+The detailed directory layout is defined by the master specification. The executable
+repository now includes the planner, simulation/runtime services, public seeded-demo
+launcher, and browser acceptance harness described by the current phase baseline.
 
 ## Runtime profiles
 

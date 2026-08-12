@@ -1,6 +1,5 @@
 from collections import defaultdict
 from datetime import timedelta, timezone
-from statistics import quantiles
 from uuid import UUID
 
 from sqlalchemy import select

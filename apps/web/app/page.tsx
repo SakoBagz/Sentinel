@@ -1,6 +1,7 @@
 import Link from "next/link";
 
 import { HealthCard } from "@/components/health-card";
+import { DemoLaunchButton } from "@/components/demo-launch-button";
 
 export default function HomePage() {
   return (
@@ -19,6 +20,7 @@ export default function HomePage() {
             mission analysis.
           </p>
           <div className="actions">
+            <DemoLaunchButton />
             <Link className="button primary" href="/missions">Open mission control</Link>
             <Link className="button" href="/missions">Browse missions</Link>
           </div>

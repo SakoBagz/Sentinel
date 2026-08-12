@@ -1,6 +1,6 @@
 # Sentinel REST API Contract
 
-Status: Phase 13 implementation baseline
+Status: Phase 14 implementation baseline
 Date: 2026-08-12
 
 ## Conventions
@@ -50,6 +50,17 @@ Create/update accepts metadata, scenario type, mission configuration, assigned
 vehicles, waypoints, and network profile references as defined by the domain model.
 Mutation is rejected once an active run has started unless the field is explicitly
 versioned as a new mission revision.
+
+## Seeded demo endpoint
+
+### `POST /api/demo/launch`
+
+Creates and starts the canonical deterministic **Angeles Forest Survey** scenario, or
+returns its current `READY`, `RUNNING`, or `PAUSED` run when one already exists. The
+response uses the normal `RunRead` contract. Clients should send `X-Session-Id` when
+available so public run limits and browser retries use a stable anonymous session key.
+The seeded run records scenario `angeles_forest_survey`, seed `20260812`, 25 UAVs, and
+the three repeatable demo failures described in `PRODUCT_SPEC.md`.
 
 ## Waypoint endpoints
 

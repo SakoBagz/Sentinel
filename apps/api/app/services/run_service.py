@@ -14,12 +14,10 @@ from app.db.models.entities import (
     MissionVehicle,
     RunVehicle,
     SimulationRun,
-    TelemetrySample,
 )
 from app.domain.enums import EventSeverity, EventType, MissionStatus, RunStatus
 from app.services import mission_service
 from app.services.public_limits import ensure_run_allowed
-from sentinel_sim.engine import SimulationEngine
 from sentinel_sim.models import MissionConfiguration, SimulationEvent, VehicleConfiguration, WaypointConfiguration, deterministic_id
 from sentinel_sim.navigation import Position
 from sentinel_sim.network import NetworkConfiguration

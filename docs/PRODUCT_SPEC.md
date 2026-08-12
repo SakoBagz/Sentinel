@@ -1,6 +1,6 @@
 # Sentinel Product Specification
 
-Status: Phase 13 implementation baseline
+Status: Phase 14 implementation baseline
 Date: 2026-08-12  
 Source: Sentinel Master Engineering Specification & Coding-Agent Constitution
 
@@ -92,8 +92,9 @@ hardcoded in the UI.
 The authoritative contracts in this directory are implemented incrementally on the
 phase branches recorded in Git history. The current main branch includes the planner,
 simulator, realtime telemetry, failures, persistence/replay, metrics, AI, runtime
-controls, and deployment hardening; benchmark scale remains an explicit measurement
-activity rather than a claim about the public demo.
+controls, deployment hardening, the seeded public launch path, and executable
+browser/migration gates; benchmark scale remains an explicit measurement activity
+rather than a claim about the public demo.
 
 ## Acceptance criteria by product milestone
 

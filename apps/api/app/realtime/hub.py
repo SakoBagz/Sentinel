@@ -4,7 +4,6 @@ from collections import defaultdict
 from dataclasses import dataclass, field
 from uuid import UUID
 
-from fastapi import WebSocket
 
 from app.observability.metrics import metrics
 from app.realtime.redis import redis_client

@@ -89,6 +89,17 @@ async function request<T>(path: string, init?: RequestInit, schema?: z.ZodType<T
   return schema ? schema.parse(value) : (value as T);
 }
 
+function browserSessionHeaders(): Record<string, string> {
+  if (typeof window === "undefined") return {};
+  const key = "sentinel-session-id";
+  let value = window.localStorage.getItem(key);
+  if (!value) {
+    value = crypto.randomUUID();
+    window.localStorage.setItem(key, value);
+  }
+  return { "X-Session-Id": value };
+}
+
 export async function listMissions(cursor?: string): Promise<Mission[]> {
   const query = cursor ? `?cursor=${encodeURIComponent(cursor)}` : "";
   const value = await request<{ items: unknown[] }>(`/api/missions${query}`);
@@ -124,7 +135,11 @@ export async function deleteWaypoint(id: string): Promise<void> {
 }
 
 export async function createRun(id: string, input: { random_seed?: number; simulation_speed?: number; duration_limit_minutes?: number } = {}): Promise<Run> {
-  return request(`/api/missions/${id}/runs`, { method: "POST", body: JSON.stringify(input) }, runSchema);
+  return request(`/api/missions/${id}/runs`, { method: "POST", headers: browserSessionHeaders(), body: JSON.stringify(input) }, runSchema);
+}
+
+export async function launchDemo(): Promise<Run> {
+  return request("/api/demo/launch", { method: "POST", headers: browserSessionHeaders() }, runSchema);
 }
 
 export async function getRun(id: string): Promise<Run> {
@@ -194,9 +209,9 @@ export async function getMetrics(runId: string): Promise<RunMetrics> {
 }
 
 export async function askAnalyst(runId: string, message: string): Promise<AnalystResponse> {
-  return request(`/api/runs/${runId}/assistant`, { method: "POST", body: JSON.stringify({ message }) }, analystSchema);
+  return request(`/api/runs/${runId}/assistant`, { method: "POST", headers: browserSessionHeaders(), body: JSON.stringify({ message }) }, analystSchema);
 }
 
 export async function getDebrief(runId: string): Promise<AnalystResponse> {
-  return request(`/api/runs/${runId}/debrief`, { method: "POST" }, analystSchema);
+  return request(`/api/runs/${runId}/debrief`, { method: "POST", headers: browserSessionHeaders() }, analystSchema);
 }

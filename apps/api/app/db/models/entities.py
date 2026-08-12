@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 from typing import Any
 from uuid import UUID, uuid4
 
-from sqlalchemy import JSON, DateTime, Double, Enum as SAEnum, ForeignKey, Index, Integer, String, Text, UniqueConstraint
+from sqlalchemy import BIGINT, JSON, DateTime, Double, Enum as SAEnum, ForeignKey, Index, Integer, String, Text, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 from sqlalchemy.types import Uuid
 
@@ -127,7 +127,7 @@ class SimulationRun(Base):
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
     mission_id: Mapped[UUID] = mapped_column(ForeignKey("missions.id"), nullable=False)
     status: Mapped[RunStatus] = enum_column(RunStatus)
-    random_seed: Mapped[int] = mapped_column(nullable=False)
+    random_seed: Mapped[int] = mapped_column(BIGINT, nullable=False)
     simulation_speed: Mapped[float] = mapped_column(Double, nullable=False, default=1.0)
     configuration: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))

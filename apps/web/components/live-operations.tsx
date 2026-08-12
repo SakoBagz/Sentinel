@@ -45,7 +45,9 @@ function LiveMap({ vehicles, history, plannedRoutes, selectedVehicleId, onSelect
     const instance = map.current;
     if (!instance) return;
     for (const [vehicleId, telemetry] of Object.entries(vehicles)) {
-      const marker = markers.current[vehicleId] ?? new maplibregl.Marker({ color: telemetry.communicationsState === "HEALTHY" ? "#53c7a3" : "#f0b45b" }).addTo(instance);
+      const marker = markers.current[vehicleId] ?? new maplibregl.Marker({ color: telemetry.communicationsState === "HEALTHY" ? "#53c7a3" : "#f0b45b" })
+        .setLngLat([telemetry.longitude, telemetry.latitude])
+        .addTo(instance);
       marker.setLngLat([telemetry.longitude, telemetry.latitude]).setPopup(new maplibregl.Popup().setText(vehicleId));
       const markerElement = marker.getElement();
       let heading = markerElement.querySelector<HTMLElement>(".sentinel-marker-heading");

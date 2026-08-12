@@ -13,6 +13,8 @@ authoritative design contracts are in [`docs/`](docs/), and engineering rules ar
 realtime delivery, failure injection, durable replay with interpolation, runtime
 controls, metrics, and local benchmark harnesses are implemented, as is the
 provider-neutral read-only Mission Analyst with mock and optional Gemini adapters.
+The landing page includes a deterministic 25-UAV Angeles Forest demo launcher, and
+the browser golden path is covered by Playwright against the Compose stack.
 
 ## Local development
 
@@ -36,6 +38,13 @@ npm run dev:web
 Open [http://localhost:3000](http://localhost:3000). The API health endpoint is
 [http://localhost:8000/api/health](http://localhost:8000/api/health).
 
+Use **Launch seeded demo** on the landing page for the public path. The equivalent
+CLI flow is:
+
+```bash
+python3 scripts/seed_demo.py --output /tmp/sentinel-demo.json
+```
+
 Convenience commands:
 
 ```bash
@@ -44,8 +53,13 @@ make test-api
 make test-web
 make typecheck
 make build
+PLAYWRIGHT_EXECUTABLE_PATH=/path/to/chrome npm --workspace apps/web run test:e2e
 PYTHONPATH=apps/api:simulator python3 scripts/load_test.py --vehicles 500 --rate 10 --duration 60
 ```
+
+The browser command expects the Compose API and web services to be running. CI installs
+its own Chromium; the optional executable override is useful when a local Playwright
+browser revision is already cached.
 
 ## Architecture
 

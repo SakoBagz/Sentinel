@@ -1,6 +1,6 @@
 # Sentinel Domain Model
 
-Status: Phase 13 implementation baseline
+Status: Phase 14 implementation baseline
 Date: 2026-08-12
 
 ## Core terms
@@ -52,11 +52,9 @@ the exact API projection remains an open contract point.
 
 ### Run status
 
-The execution lifecycle uses the same externally visible values where the master
-specification defines them: `READY`, `RUNNING`, `PAUSED`, `COMPLETED`, and `ABORTED`.
-An internal `CREATED`/unstarted representation may be needed for a persisted run, but
-it must not be exposed as an arbitrary free-form status. Confirm whether `READY` is
-the public pre-start value before Phase 1.
+The execution lifecycle uses the externally visible values `READY`, `RUNNING`,
+`PAUSED`, `COMPLETED`, and `ABORTED`. `READY` is the persisted pre-start value returned
+by run creation; no separate free-form `CREATED` state is exposed.
 
 ### Vehicle mission state
 

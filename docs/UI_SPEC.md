@@ -1,6 +1,6 @@
 # Sentinel Frontend and UI Specification
 
-Status: Phase 13 implementation baseline
+Status: Phase 14 implementation baseline
 Date: 2026-08-12
 
 ## Product feel
@@ -20,6 +20,10 @@ Dark mode is acceptable but must preserve contrast and hierarchy.
 | `/runs/[id]/live` | Live mission operations |
 | `/runs/[id]/replay` | Historical replay |
 | `/runs/[id]/debrief` | Metrics and AI analysis |
+
+The landing page exposes a primary **Launch seeded demo** action. It starts or
+reconnects to the canonical Angeles Forest Survey run and routes directly to live
+operations; launch errors remain visible inline without losing the landing context.
 
 ## Mission planner
 
@@ -127,8 +131,8 @@ simulation and replay functionality remain operational.”
 
 ## Resolved interaction baselines
 
-- Confirm visual design tokens and typography before implementation.
-- Confirm whether planner route edits are optimistic or save-on-submit only; baseline
-  is local edits followed by explicit save.
+- Visual design tokens and typography use the restrained dark operations baseline already
+  present in the landing, planner, live, replay, and debrief surfaces.
+- Planner route edits are local until an explicit save action is submitted.
 - Live reconnect state comes from `GET /api/runs/{run_id}/snapshot` before the
   WebSocket subscription is restored.

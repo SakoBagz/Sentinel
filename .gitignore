@@ -12,6 +12,7 @@ htmlcov/
 node_modules/
 .next/
 out/
+apps/web/test-results/
 *.tsbuildinfo
 benchmark-results/*.json
 benchmark-results/*.md

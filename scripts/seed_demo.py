@@ -20,76 +20,14 @@ def main() -> None:
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--base-url", default="http://localhost:8000")
     parser.add_argument("--session-id", default="sentinel-demo")
-    parser.add_argument("--start", action="store_true", help="start the seeded run after creation")
+    parser.add_argument("--start", action="store_true", help="kept for compatibility; demo launches always start")
     parser.add_argument("--output", type=Path, default=None)
     args = parser.parse_args()
 
     with httpx.Client(base_url=args.base_url.rstrip("/"), headers={"X-Session-Id": args.session_id}, timeout=20.0) as client:
-        mission = request(client, "POST", "/api/missions", json={
-            "name": "Angeles Forest communications relay",
-            "description": "Deterministic benign environmental survey demo.",
-            "scenario_type": "environmental_survey",
-        })
-        vehicle_ids: list[str] = []
-        starts = [
-            (f"UAV-{index:02d}", 34.145 + (index % 5) * 0.0015, -118.250 + (index // 5) * 0.0015)
-            for index in range(1, 26)
-        ]
-        for callsign, latitude, longitude in starts:
-            vehicle = request(client, "POST", f"/api/missions/{mission['id']}/vehicles", json={
-                "callsign": callsign,
-                "vehicle_type": "SURVEY",
-                "max_speed_mps": 25,
-                "cruise_speed_mps": 12,
-                "battery_capacity": 100,
-                "telemetry_rate_hz": 5,
-                "starting_latitude": latitude,
-                "starting_longitude": longitude,
-                "starting_altitude_m": 100,
-                "configuration": {
-                    "return_battery_threshold": 25,
-                    "network_profile": {
-                        "base_latency_ms": 50,
-                        "jitter_ms": 10,
-                        "packet_loss_percent": 1,
-                        "duplicate_percent": 0.5,
-                    },
-                },
-            })
-            vehicle_ids.append(vehicle["id"])
-            for sequence, offset in enumerate((0.008, 0.012, 0.005)):
-                request(client, "POST", f"/api/missions/{mission['id']}/waypoints", json={
-                    "vehicle_id": vehicle["id"],
-                    "sequence": sequence,
-                    "latitude": latitude + offset,
-                    "longitude": longitude + (0.001 if sequence % 2 == 0 else -0.001),
-                    "altitude_m": 110 + sequence * 5,
-                    "target_speed_mps": 12,
-                    "arrival_radius_m": 10,
-                    "action": "SURVEY" if sequence == 1 else "TRANSIT",
-                })
-        run = request(client, "POST", f"/api/missions/{mission['id']}/runs", json={"random_seed": 20260812, "simulation_speed": 1.0})
-        if args.start:
-            run = request(client, "POST", f"/api/runs/{run['id']}/start")
-            run_vehicle_by_callsign = {vehicle["callsign"]: vehicle["id"] for vehicle in run["vehicles"]}
-            request(client, "POST", f"/api/runs/{run['id']}/failures", json={
-                "vehicle_id": run_vehicle_by_callsign["UAV-07"],
-                "failure_type": "COMMUNICATIONS_BLACKOUT",
-                "duration_ms": 10_000,
-            })
-            request(client, "POST", f"/api/runs/{run['id']}/failures", json={
-                "vehicle_id": run_vehicle_by_callsign["UAV-12"],
-                "failure_type": "BATTERY_ANOMALY",
-                "duration_ms": 90_000,
-                "configuration": {"drain_multiplier": 20.0},
-            })
-            request(client, "POST", f"/api/runs/{run['id']}/failures", json={
-                "vehicle_id": run_vehicle_by_callsign["UAV-18"],
-                "failure_type": "PACKET_LOSS",
-                "duration_ms": 20_000,
-                "configuration": {"packet_loss_percent": 50},
-            })
-        result = {"mission": mission, "vehicle_ids": vehicle_ids, "run": run}
+        run = request(client, "POST", "/api/demo/launch")
+        mission = request(client, "GET", f"/api/missions/{run['mission_id']}")
+        result = {"mission": mission, "run": run}
     encoded = json.dumps(result, indent=2, sort_keys=True)
     print(encoded)
     if args.output:

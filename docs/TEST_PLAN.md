@@ -1,6 +1,6 @@
 # Sentinel Test Plan
 
-Status: Phase 13 implementation baseline
+Status: Phase 14 implementation baseline
 Date: 2026-08-12
 
 ## Testing principles
@@ -47,22 +47,15 @@ and connection-state behavior.
 
 ### End-to-end golden path
 
-Playwright covers:
+Playwright covers the executable local acceptance path:
 
-1. Open Sentinel.
-2. Create a mission.
-3. Add a UAV.
-4. Add a route and waypoints.
-5. Save and reload the mission.
-6. Start a simulation.
-7. Observe movement and live telemetry.
-8. Inject a communications blackout.
-9. Observe degraded/stale/disconnected behavior.
-10. Observe recovery.
-11. Complete the run.
-12. Open replay and seek.
-13. Open debrief.
-14. Ask the mock analyst about a seeded incident when AI testing is enabled.
+1. Open Sentinel and launch the seeded public demo.
+2. Create a mission through the API fixture, add a UAV, and add a waypoint.
+3. Enter the planner, create a run, and start the live simulation.
+4. Observe the live vehicle surface and telemetry connection.
+5. Inject an allowed failure and wait for persisted completion.
+6. Open replay and verify historical samples are loaded.
+7. Open debrief, generate the deterministic mock analysis, and verify its summary.
 
 ## Contract tests
 
@@ -83,7 +76,8 @@ GitHub Actions should run:
 
 Backend:
 
-- lint;
+- migration upgrade/check;
+- syntax/import static lint;
 - type checks where configured;
 - unit and integration pytest;
 - migration/schema checks.
@@ -97,7 +91,8 @@ Frontend:
 
 System:
 
-- Playwright with local services or a controlled test stack.
+- Playwright with the built Docker Compose acceptance stack, including the public
+  seeded-demo and planner-to-debrief golden paths.
 
 Deployment cannot proceed from main while required checks fail. Tests must not be
 hidden, skipped silently, or replaced with fabricated results.

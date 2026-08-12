@@ -16,6 +16,7 @@ from app.api.failure_routes import router as failure_router
 from app.api.history_routes import router as history_router
 from app.api.metrics_routes import router as metrics_router
 from app.api.ai_routes import router as ai_router
+from app.api.demo_routes import router as demo_router
 from app.api.vehicle_routes import router as vehicle_router
 from app.api.waypoint_routes import router as waypoint_router
 from app.config import get_settings
@@ -95,6 +96,7 @@ app.include_router(failure_router, prefix="/api")
 app.include_router(history_router, prefix="/api")
 app.include_router(metrics_router, prefix="/api")
 app.include_router(ai_router, prefix="/api")
+app.include_router(demo_router, prefix="/api")
 app.include_router(vehicle_router, prefix="/api")
 app.include_router(waypoint_router, prefix="/api")
 

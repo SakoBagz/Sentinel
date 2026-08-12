@@ -9,14 +9,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from app.ai import tools
 from app.ai.providers import (
     AnalystProviderError,
-    AnalystProviderUnavailable,
     provider_for,
 )
 from app.ai.schemas import AnalystContext, AnalystResult
 from app.api.schemas import AnalystRequest
 from app.config import get_settings
 from app.db.models.entities import Debrief
-from app.services.run_service import RunNotFound, get_run
+from app.services.run_service import get_run
 
 logger = logging.getLogger(__name__)
 

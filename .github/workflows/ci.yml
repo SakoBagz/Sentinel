@@ -14,7 +14,13 @@ jobs:
         with:
           python-version: "3.12"
       - name: Install backend dependencies
-        run: python -m pip install -r apps/api/requirements.txt
+        run: python -m pip install -r apps/api/requirements-dev.txt
+      - name: Check migrations
+        run: |
+          DATABASE_URL=sqlite+aiosqlite:////tmp/sentinel-ci.db PYTHONPATH=apps/api alembic -c apps/api/alembic.ini upgrade head
+          DATABASE_URL=sqlite+aiosqlite:////tmp/sentinel-ci.db PYTHONPATH=apps/api alembic -c apps/api/alembic.ini check
+      - name: Run backend static lint
+        run: ruff check --config apps/api/pyproject.toml --select E9,F apps/api simulator scripts
       - name: Run backend and simulator tests
         run: PYTHONPATH=apps/api:simulator pytest apps/api/tests simulator/tests scripts/tests
 
@@ -31,3 +37,33 @@ jobs:
       - run: npm run lint
       - run: npm run test:web
       - run: npm run build
+
+  e2e:
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - run: npm ci
+      - name: Start the Compose acceptance stack
+        run: docker compose up -d --build
+      - name: Wait for API and web
+        run: |
+          curl --retry 30 --retry-delay 2 --retry-connrefused --fail http://127.0.0.1:8000/api/health
+          curl --retry 30 --retry-delay 2 --retry-connrefused --fail http://127.0.0.1:3000/
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+      - name: Run browser golden path
+        run: npm --workspace apps/web run test:e2e
+      - name: Dump service logs on failure
+        if: failure()
+        run: docker compose logs
+      - name: Stop acceptance stack
+        if: always()
+        run: docker compose down -v

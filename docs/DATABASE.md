@@ -1,6 +1,6 @@
 # Sentinel Database Design
 
-Status: Phase 13 implementation baseline
+Status: Phase 14 implementation baseline
 Date: 2026-08-12
 
 ## Persistence policy
@@ -142,7 +142,9 @@ explicit setting enables it.
 
 Alembic owns reviewed schema migrations. The initial migration establishes the
 mission association table, run-scoped IDs, durable telemetry event IDs, enum
-enforcement, and delete behavior.
+enforcement, and delete behavior. The Phase 14 migration expands
+`simulation_runs.random_seed` to `BIGINT`, matching the documented run contract and
+allowing the full deterministic seed range.
 
 ## Resolved schema decisions
 
