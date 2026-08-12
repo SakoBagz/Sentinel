@@ -1,7 +1,7 @@
 from dataclasses import dataclass
 from uuid import UUID
 
-from app.domain.enums import CommunicationsState, EventSeverity, EventType, VehicleMissionState
+from app.domain.enums import CommunicationsState, EventSeverity, EventType, FailureType, VehicleMissionState
 
 from sentinel_sim.battery import BatteryModel
 from sentinel_sim.clock import SimulationClock
@@ -15,6 +15,7 @@ from sentinel_sim.models import (
     deterministic_id,
 )
 from sentinel_sim.navigation import Position, bearing_between, destination_point, distance_between
+from sentinel_sim.network import FailureWindow, NetworkConfiguration, NetworkSimulator
 from sentinel_sim.random import SeededRandom
 
 
@@ -45,6 +46,7 @@ class SimulationEngine:
         tick_hz: float = 10.0,
         telemetry_rate_hz: float | None = None,
         battery_model: BatteryModel | None = None,
+        network_profiles: dict[UUID, NetworkConfiguration] | None = None,
     ) -> None:
         if not mission.vehicles:
             raise ValueError("A simulation requires at least one vehicle")
@@ -59,6 +61,7 @@ class SimulationEngine:
         self.telemetry_period_ms = max(1, round(1000 / self.telemetry_rate_hz))
         self.next_telemetry_ms = self.telemetry_period_ms
         self.battery_model = battery_model or BatteryModel()
+        self.network = NetworkSimulator(self.random, network_profiles)
         self.vehicles = {
             config.id: _RuntimeVehicle(config=config, position=config.starting_position)
             for config in mission.vehicles
@@ -73,8 +76,43 @@ class SimulationEngine:
             for vehicle_id in self.vehicles
         }
         self.telemetry: list[TelemetryEnvelope] = []
+        self.generated_telemetry: list[TelemetryEnvelope] = []
         self.events: list[SimulationEvent] = []
         self._event_ordinal = 0
+
+    def inject_failure(
+        self,
+        failure_id: UUID,
+        vehicle_id: UUID,
+        failure_type: FailureType,
+        duration_ms: int,
+        configuration: dict | None = None,
+    ) -> None:
+        if vehicle_id not in self.vehicles:
+            raise ValueError("vehicle is not part of this run")
+        if duration_ms <= 0:
+            raise ValueError("failure duration must be positive")
+        window = FailureWindow(
+            failure_id=failure_id,
+            failure_type=failure_type,
+            start_sim_time_ms=self.clock.sim_time_ms,
+            end_sim_time_ms=self.clock.sim_time_ms + duration_ms,
+            configuration=configuration or {},
+        )
+        self.network.inject_failure(vehicle_id, window)
+        vehicle = self.vehicles[vehicle_id]
+        self._emit_event(vehicle, EventType.FAILURE_INJECTED, EventSeverity.WARNING, {
+            "failure_id": str(failure_id), "failure_type": failure_type.value, "duration_ms": duration_ms,
+        })
+
+    def clear_failure(self, failure_id: UUID, vehicle_id: UUID) -> None:
+        if vehicle_id not in self.vehicles:
+            raise ValueError("vehicle is not part of this run")
+        cleared = self.network.clear_failure(vehicle_id, failure_id, self.clock.sim_time_ms)
+        if cleared is not None:
+            self._emit_event(self.vehicles[vehicle_id], EventType.FAILURE_CLEARED, EventSeverity.INFO, {
+                "failure_id": str(failure_id), "failure_type": cleared.failure_type.value,
+            })
 
     def _emit_event(
         self,
@@ -129,10 +167,14 @@ class SimulationEngine:
         return distance - travel
 
     def _update_battery(self, vehicle: _RuntimeVehicle) -> None:
+        multiplier = 1.0
+        for failure in self.network.active_failures(vehicle.config.id, self.clock.sim_time_ms):
+            if failure.failure_type is FailureType.BATTERY_ANOMALY:
+                multiplier = max(multiplier, float(failure.configuration.get("drain_multiplier", 2.0)))
         vehicle.battery_percent = max(
             0.0,
             vehicle.battery_percent
-            - self.battery_model.drain_percent(vehicle.ground_speed_mps, self.clock.dt_seconds),
+            - self.battery_model.drain_percent(vehicle.ground_speed_mps, self.clock.dt_seconds) * multiplier,
         )
         if vehicle.battery_percent <= 30 and not vehicle.low_battery_emitted:
             vehicle.low_battery_emitted = True
@@ -187,10 +229,25 @@ class SimulationEngine:
                 self._transition(vehicle, VehicleMissionState.COMPLETE, EventType.VEHICLE_COMPLETED)
         self._update_battery(vehicle)
 
+    def _sync_network_state(self, vehicle: _RuntimeVehicle) -> None:
+        previous = vehicle.communications_state.value
+        current = self.network.advance(vehicle.config.id, self.clock.sim_time_ms, self.clock.tick_interval_ms)
+        vehicle.communications_state = CommunicationsState(current)
+        if previous == current:
+            return
+        mapping = {
+            "DEGRADED": (EventType.COMMUNICATIONS_DEGRADED, EventSeverity.WARNING),
+            "STALE": (EventType.COMMUNICATIONS_STALE, EventSeverity.WARNING),
+            "DISCONNECTED": (EventType.COMMUNICATIONS_LOST, EventSeverity.CRITICAL),
+            "RECOVERING": (EventType.COMMUNICATIONS_RECOVERING, EventSeverity.INFO),
+            "HEALTHY": (EventType.COMMUNICATIONS_RESTORED, EventSeverity.INFO),
+        }
+        event_type, severity = mapping[current]
+        self._emit_event(vehicle, event_type, severity, {"communications_state": current})
+
     def _emit_telemetry(self, vehicle: _RuntimeVehicle) -> None:
         event_id = deterministic_id(self.run_id, f"telemetry:{vehicle.config.id}", vehicle.sequence)
-        self.telemetry.append(
-            TelemetryEnvelope(
+        envelope = TelemetryEnvelope(
                 mission_id=self.mission.id,
                 run_id=self.run_id,
                 vehicle_id=vehicle.config.id,
@@ -208,17 +265,24 @@ class SimulationEngine:
                     "communications_state": vehicle.communications_state.value,
                 },
             )
-        )
+        self.generated_telemetry.append(envelope)
+        self.network.submit(envelope)
         vehicle.sequence += 1
 
     def tick(self) -> None:
         self.clock.advance()
         for vehicle in self.vehicles.values():
+            for expired in self.network.expired_failures(vehicle.config.id, self.clock.sim_time_ms):
+                self._emit_event(vehicle, EventType.FAILURE_CLEARED, EventSeverity.INFO, {
+                    "failure_id": str(expired.failure_id), "failure_type": expired.failure_type.value,
+                })
+            self._sync_network_state(vehicle)
             self._update_vehicle(vehicle)
             if self.clock.sim_time_ms >= self.next_telemetry_ms:
                 self._emit_telemetry(vehicle)
         if self.clock.sim_time_ms >= self.next_telemetry_ms:
             self.next_telemetry_ms += self.telemetry_period_ms
+        self.telemetry.extend(self.network.drain(self.clock.sim_time_ms))
 
     def is_complete(self) -> bool:
         return all(vehicle.mission_state is VehicleMissionState.COMPLETE for vehicle in self.vehicles.values())
@@ -248,7 +312,7 @@ class SimulationEngine:
             duration_ms=self.clock.sim_time_ms,
             completed=self.is_complete(),
             telemetry=tuple(self.telemetry),
+            generated_telemetry=tuple(self.generated_telemetry),
             events=tuple(self.events),
             vehicles=snapshots,
         )
-

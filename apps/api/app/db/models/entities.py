@@ -118,6 +118,8 @@ class NetworkProfile(Base):
     disconnect_duration_max_ms: Mapped[int] = mapped_column(Integer, nullable=False)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
 
+    run_vehicles: Mapped[list["RunVehicle"]] = relationship(back_populates="network_profile")
+
 
 class SimulationRun(Base):
     __tablename__ = "simulation_runs"
@@ -153,6 +155,7 @@ class RunVehicle(Base):
 
     run: Mapped[SimulationRun] = relationship(back_populates="run_vehicles")
     vehicle_definition: Mapped[VehicleDefinition] = relationship(back_populates="run_vehicles")
+    network_profile: Mapped[NetworkProfile | None] = relationship(back_populates="run_vehicles")
 
 
 class TelemetrySample(Base):
@@ -221,4 +224,3 @@ class Debrief(Base):
     model: Mapped[str | None] = mapped_column(String(100))
     structured_result: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
-

@@ -131,10 +131,10 @@ class SimulationResult:
     duration_ms: int
     completed: bool
     telemetry: tuple[TelemetryEnvelope, ...]
+    generated_telemetry: tuple[TelemetryEnvelope, ...]
     events: tuple[SimulationEvent, ...]
     vehicles: tuple[VehicleSnapshot, ...]
 
 
 def deterministic_id(run_id: UUID, name: str, ordinal: int) -> UUID:
     return uuid5(run_id, f"sentinel:{name}:{ordinal}")
-

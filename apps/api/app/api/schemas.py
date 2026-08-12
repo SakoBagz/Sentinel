@@ -4,7 +4,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.domain.enums import MissionStatus, RunStatus, WaypointAction
+from app.domain.enums import FailureType, MissionStatus, RunStatus, WaypointAction
 
 
 class APIModel(BaseModel):
@@ -137,3 +137,79 @@ class RunRead(APIModel):
     created_at: datetime
     vehicles: list[RunVehicleRead] = Field(default_factory=list)
 
+
+class FailureCreate(APIModel):
+    vehicle_id: UUID
+    failure_type: FailureType
+    duration_ms: int = Field(default=10_000, ge=100, le=15 * 60 * 1000)
+    configuration: dict[str, Any] = Field(default_factory=dict)
+
+
+class FailureRead(APIModel):
+    id: UUID
+    run_id: UUID
+    vehicle_id: UUID | None
+    failure_type: FailureType
+    started_sim_time_ms: int | None
+    ended_sim_time_ms: int | None
+    configuration: dict[str, Any]
+    created_at: datetime
+
+
+class TelemetryRead(APIModel):
+    id: int
+    event_id: UUID
+    run_id: UUID
+    vehicle_id: UUID
+    sequence: int
+    sim_time_ms: int
+    received_at: datetime
+    latitude: float | None
+    longitude: float | None
+    altitude_m: float | None
+    heading_deg: float | None
+    ground_speed_mps: float | None
+    battery_percent: float | None
+    mission_state: str | None
+    communications_state: str | None
+
+
+class EventRead(APIModel):
+    id: UUID
+    run_id: UUID
+    vehicle_id: UUID | None
+    event_type: str
+    severity: str
+    schema_version: int
+    sim_time_ms: int
+    timestamp: datetime
+    payload: dict[str, Any]
+
+
+class TelemetryPage(APIModel):
+    items: list[TelemetryRead]
+    next_cursor: str | None = None
+
+
+class EventPage(APIModel):
+    items: list[EventRead]
+    next_cursor: str | None = None
+
+
+class MetricsRead(APIModel):
+    run_id: UUID
+    telemetry_messages_received: int
+    telemetry_sequences_missing: int
+    telemetry_sequences_duplicate: int
+    telemetry_sequences_out_of_order: int
+    event_count: int
+    warning_count: int
+    critical_count: int
+    vehicle_count: int
+    completed_vehicle_count: int
+    mission_duration_ms: int
+    communications_availability_percent: float
+    telemetry_throughput_per_second: float
+    latency_p50_ms: float
+    latency_p95_ms: float
+    latency_p99_ms: float

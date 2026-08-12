@@ -121,3 +121,37 @@ export async function startRun(id: string): Promise<Run> {
   return request(`/api/runs/${id}/start`, { method: "POST" }, runSchema);
 }
 
+export const failureTypes = ["COMMUNICATIONS_BLACKOUT", "HIGH_LATENCY", "PACKET_LOSS", "GPS_QUALITY_DEGRADATION", "BATTERY_ANOMALY", "SENSOR_UNAVAILABLE", "SERVICE_DELAY"] as const;
+export type FailureType = typeof failureTypes[number];
+
+export async function createFailure(runId: string, input: { vehicle_id: string; failure_type: FailureType; duration_ms: number; configuration?: Record<string, unknown> }): Promise<unknown> {
+  return request(`/api/runs/${runId}/failures`, { method: "POST", body: JSON.stringify(input) });
+}
+
+const telemetrySchema = z.object({
+  id: z.number(), event_id: z.string(), run_id: z.string(), vehicle_id: z.string(), sequence: z.number(), sim_time_ms: z.number(), received_at: z.string(),
+  latitude: z.number().nullable(), longitude: z.number().nullable(), altitude_m: z.number().nullable(), heading_deg: z.number().nullable(), ground_speed_mps: z.number().nullable(), battery_percent: z.number().nullable(), mission_state: z.string().nullable(), communications_state: z.string().nullable(),
+});
+const telemetryPageSchema = z.object({ items: z.array(telemetrySchema), next_cursor: z.string().nullable() });
+const eventSchema = z.object({ id: z.string(), run_id: z.string(), vehicle_id: z.string().nullable(), event_type: z.string(), severity: z.string(), schema_version: z.number(), sim_time_ms: z.number(), timestamp: z.string(), payload: z.record(z.string(), z.unknown()) });
+const eventPageSchema = z.object({ items: z.array(eventSchema), next_cursor: z.string().nullable() });
+const metricsSchema = z.object({ run_id: z.string(), telemetry_messages_received: z.number(), telemetry_sequences_missing: z.number(), telemetry_sequences_duplicate: z.number(), telemetry_sequences_out_of_order: z.number(), event_count: z.number(), warning_count: z.number(), critical_count: z.number(), vehicle_count: z.number(), completed_vehicle_count: z.number(), mission_duration_ms: z.number(), communications_availability_percent: z.number(), telemetry_throughput_per_second: z.number(), latency_p50_ms: z.number(), latency_p95_ms: z.number(), latency_p99_ms: z.number() });
+export type TelemetrySample = z.infer<typeof telemetrySchema>;
+export type MissionEvent = z.infer<typeof eventSchema>;
+export type RunMetrics = z.infer<typeof metricsSchema>;
+
+export async function getReplay(runId: string, startMs = 0, endMs?: number): Promise<TelemetrySample[]> {
+  const query = new URLSearchParams({ start_ms: String(startMs), limit: "5000" });
+  if (endMs !== undefined) query.set("end_ms", String(endMs));
+  const page = await request(`/api/runs/${runId}/replay?${query.toString()}`, undefined, telemetryPageSchema);
+  return page.items;
+}
+
+export async function getEvents(runId: string): Promise<MissionEvent[]> {
+  const page = await request(`/api/runs/${runId}/events?limit=2000`, undefined, eventPageSchema);
+  return page.items;
+}
+
+export async function getMetrics(runId: string): Promise<RunMetrics> {
+  return request(`/api/runs/${runId}/metrics`, undefined, metricsSchema);
+}

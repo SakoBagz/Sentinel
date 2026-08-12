@@ -20,6 +20,7 @@ from app.services import mission_service
 from sentinel_sim.engine import SimulationEngine
 from sentinel_sim.models import MissionConfiguration, VehicleConfiguration, WaypointConfiguration
 from sentinel_sim.navigation import Position
+from sentinel_sim.network import NetworkConfiguration
 
 
 class RunNotFound(Exception):
@@ -88,12 +89,57 @@ def _mission_to_simulation(mission: Mission, run: SimulationRun) -> MissionConfi
     )
 
 
+def network_profiles_for_run(run: SimulationRun) -> dict[UUID, NetworkConfiguration]:
+    """Convert persisted run-scoped network settings into simulator profiles."""
+    profiles: dict[UUID, NetworkConfiguration] = {}
+    for run_vehicle in run.run_vehicles:
+        if run_vehicle.network_profile is not None:
+            profile = run_vehicle.network_profile
+            profiles[run_vehicle.id] = NetworkConfiguration(
+                base_latency_ms=profile.base_latency_ms,
+                jitter_ms=profile.jitter_ms,
+                packet_loss_percent=profile.packet_loss_percent,
+                duplicate_percent=profile.duplicate_percent,
+                disconnect_probability=profile.disconnect_probability,
+                disconnect_duration_min_ms=profile.disconnect_duration_min_ms,
+                disconnect_duration_max_ms=profile.disconnect_duration_max_ms,
+            )
+            continue
+        raw = run_vehicle.configuration.get("network_profile")
+        if not isinstance(raw, dict):
+            continue
+        allowed = {
+            key: raw[key]
+            for key in (
+                "base_latency_ms",
+                "jitter_ms",
+                "packet_loss_percent",
+                "duplicate_percent",
+                "disconnect_probability",
+                "disconnect_duration_min_ms",
+                "disconnect_duration_max_ms",
+            )
+            if key in raw
+        }
+        try:
+            profiles[run_vehicle.id] = NetworkConfiguration(**allowed)
+        except (TypeError, ValueError):
+            # Invalid optional profiles should not prevent an otherwise valid run;
+            # the API validator and debrief surface can report the configuration.
+            continue
+    return profiles
+
+
 async def get_run(session: AsyncSession, run_id: UUID) -> SimulationRun:
     result = await session.execute(
         select(SimulationRun)
         .options(
             selectinload(SimulationRun.run_vehicles).selectinload(RunVehicle.vehicle_definition),
-            selectinload(SimulationRun.mission),
+            selectinload(SimulationRun.run_vehicles).selectinload(RunVehicle.network_profile),
+            selectinload(SimulationRun.mission)
+            .selectinload(Mission.vehicle_memberships)
+            .selectinload(MissionVehicle.vehicle_definition),
+            selectinload(SimulationRun.mission).selectinload(Mission.waypoints),
         )
         .where(SimulationRun.id == run_id)
     )
