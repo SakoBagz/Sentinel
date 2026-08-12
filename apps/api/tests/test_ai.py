@@ -22,8 +22,13 @@ def test_mock_analyst_declines_unsafe_guidance() -> None:
 
 def test_mock_analyst_endpoint_is_read_only_and_structured(client) -> None:
     mission = client.post("/api/missions", json={"name": "Analyst test"}).json()
-    client.post(
+    vehicle = client.post(
         f"/api/missions/{mission['id']}/vehicles", json={"callsign": "UAV-AI"}
+    )
+    vehicle.raise_for_status()
+    client.post(
+        f"/api/missions/{mission['id']}/waypoints",
+        json={"vehicle_id": vehicle.json()["id"], "sequence": 0, "latitude": 34.15, "longitude": -118.24, "altitude_m": 100},
     ).raise_for_status()
     run = client.post(f"/api/missions/{mission['id']}/runs", json={"random_seed": 3}).json()
 

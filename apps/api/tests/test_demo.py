@@ -10,12 +10,25 @@ def test_demo_launch_creates_the_seeded_run_and_is_idempotent(client, monkeypatc
         json={"name": "Unrelated environmental survey", "scenario_type": "environmental_survey"},
     )
     assert unrelated.status_code == 201
+    lookalike = client.post(
+        "/api/missions",
+        json={
+            "name": "Angeles Forest Survey",
+            "description": "User-owned mission that must not be normalized as the seeded demo.",
+            "scenario_type": "angeles_forest_survey",
+        },
+    ).json()
+    client.post(
+        f"/api/missions/{lookalike['id']}/vehicles",
+        json={"callsign": "FOREIGN-DEMO", "starting_latitude": 34.15, "starting_longitude": -118.24},
+    )
     headers = {"X-Session-Id": "demo-browser"}
     first_response = client.post("/api/demo/launch", headers=headers)
     assert first_response.status_code == 200
     first = first_response.json()
     assert first["status"] == "RUNNING"
     assert len(first["vehicles"]) == 25
+    assert first["mission_id"] != lookalike["id"]
 
     mission = client.get(f"/api/missions/{first['mission_id']}").json()
     assert mission["name"] == "Angeles Forest Survey"

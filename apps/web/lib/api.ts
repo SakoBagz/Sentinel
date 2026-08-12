@@ -193,7 +193,7 @@ const analystSchema = z.object({ run_id: z.string(), answer: z.string(), confide
 export type AnalystResponse = z.infer<typeof analystSchema>;
 
 export async function getReplay(runId: string, startMs = 0, endMs?: number): Promise<TelemetrySample[]> {
-  const query = new URLSearchParams({ start_ms: String(startMs), limit: "5000" });
+  const query = new URLSearchParams({ start_ms: String(startMs), limit: "5000", downsample: "true" });
   if (endMs !== undefined) query.set("end_ms", String(endMs));
   const page = await request(`/api/runs/${runId}/replay?${query.toString()}`, undefined, telemetryPageSchema);
   return page.items;

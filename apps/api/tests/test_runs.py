@@ -1,6 +1,17 @@
 from uuid import UUID
 
 
+def test_run_creation_rejects_a_vehicle_without_a_route(client) -> None:
+    mission = client.post("/api/missions", json={"name": "Missing route"}).json()
+    client.post(
+        f"/api/missions/{mission['id']}/vehicles",
+        json={"callsign": "UAV-NO-ROUTE", "starting_latitude": 34.15, "starting_longitude": -118.24},
+    )
+    response = client.post(f"/api/missions/{mission['id']}/runs", json={})
+    assert response.status_code == 409
+    assert "Every mission vehicle needs a route" in response.json()["error"]["message"]
+
+
 def test_run_creation_and_deterministic_completion(client) -> None:
     mission = client.post("/api/missions", json={"name": "Run test"}).json()
     vehicle = client.post(

@@ -181,6 +181,18 @@ async def create_run(session: AsyncSession, mission_id: UUID, payload: RunCreate
     mission = await mission_service.get_mission(session, mission_id)
     if not mission.vehicle_memberships:
         raise RunConflict("A mission must have at least one vehicle before it can run")
+    shared_route_exists = any(waypoint.vehicle_id is None for waypoint in mission.waypoints)
+    routed_vehicle_ids = {waypoint.vehicle_id for waypoint in mission.waypoints if waypoint.vehicle_id is not None}
+    unrouted_callsigns = [
+        membership.vehicle_definition.callsign
+        for membership in mission.vehicle_memberships
+        if not shared_route_exists and membership.id not in routed_vehicle_ids
+    ]
+    if unrouted_callsigns:
+        raise RunConflict(
+            "Every mission vehicle needs a route before it can run: "
+            + ", ".join(sorted(unrouted_callsigns))
+        )
     try:
         await ensure_run_allowed(session, mission, session_id)
     except ValueError as exc:

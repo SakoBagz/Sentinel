@@ -48,9 +48,13 @@ export function MissionPlanner({ missionId }: Props) {
   }, [mission]);
 
   const selectedWaypoint = mission?.waypoints.find((waypoint) => waypoint.id === selectedWaypointId) ?? null;
+  const missionLoaded = mission !== null;
+  const hasCompleteRoutes = mission?.vehicles.every((vehicle) =>
+    mission.waypoints.some((waypoint) => waypoint.vehicle_id === null || waypoint.vehicle_id === vehicle.id)
+  ) ?? false;
 
   useEffect(() => {
-    if (!mapNode.current || mapRef.current) return;
+    if (!missionLoaded || !mapNode.current || mapRef.current) return;
     const map = new maplibregl.Map({
       container: mapNode.current,
       style: "https://tiles.openfreemap.org/styles/liberty",
@@ -83,7 +87,7 @@ export function MissionPlanner({ missionId }: Props) {
     });
     mapRef.current = map;
     return () => { map.remove(); mapRef.current = null; };
-  }, [reload]);
+  }, [missionLoaded, reload]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -195,7 +199,7 @@ export function MissionPlanner({ missionId }: Props) {
   if (!mission) return <main className="main"><div className="card">{error ?? "Loading mission…"}</div></main>;
   return (
     <main className="main">
-      <div className="planner-heading"><div><div className="eyebrow">Mission planner</div><h1>{mission.name}</h1></div><div className="actions compact"><button className="button" disabled={busy} onClick={saveMission}>Save mission</button><button className="button primary" disabled={busy || mission.vehicles.length === 0} onClick={startSimulation}>Start simulation</button></div></div>
+      <div className="planner-heading"><div><div className="eyebrow">Mission planner</div><h1>{mission.name}</h1></div><div className="actions compact"><button className="button" disabled={busy} onClick={saveMission}>Save mission</button><button className="button primary" disabled={busy || mission.vehicles.length === 0 || !hasCompleteRoutes} title={!hasCompleteRoutes ? "Add at least one waypoint for every UAV" : undefined} onClick={startSimulation}>Start simulation</button></div></div>
       {error && <div className="notice error">{error}</div>}
       <div className="workspace">
         <aside className="rail"><div className="eyebrow">UAV fleet</div><form className="inline-form" onSubmit={handleAddVehicle}><input aria-label="Callsign" placeholder="UAV-004" value={callsign} onChange={(event) => setCallsign(event.target.value)} /><button className="button" disabled={busy}>Add</button></form><div className="list">{mission.vehicles.map((vehicle) => <button className={`list-item selectable ${selectedVehicle === vehicle.id ? "selected" : ""}`} key={vehicle.id} onClick={() => setSelectedVehicle(vehicle.id)}><strong>{vehicle.callsign}</strong><span>{vehicle.vehicle_type} · {mission.waypoints.filter((item) => item.vehicle_id === vehicle.id).length} waypoints</span></button>)}</div></aside>

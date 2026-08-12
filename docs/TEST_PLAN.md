@@ -50,11 +50,13 @@ and connection-state behavior.
 Playwright covers the executable local acceptance path:
 
 1. Open Sentinel and launch the seeded public demo.
-2. Create a mission through the API fixture, add a UAV, and add a waypoint.
+2. Create a mission through the API fixture, add a UAV, verify an unrouted mission
+   cannot start, and add a waypoint by clicking the planner map.
 3. Enter the planner, create a run, and start the live simulation.
 4. Observe the live vehicle surface and telemetry connection.
 5. Inject an allowed failure and wait for persisted completion.
-6. Open replay and verify historical samples are loaded.
+6. Open replay, verify historical samples span the full run, and verify an event
+   link seeks and highlights its exact persisted timestamp.
 7. Open debrief, generate the deterministic mock analysis, and verify its summary.
 
 ## Contract tests

@@ -72,7 +72,10 @@ class SimulationEngine:
         self.routes: dict[UUID, tuple] = {
             vehicle_id: tuple(
                 sorted(
-                    (waypoint for waypoint in mission.waypoints if waypoint.vehicle_id == vehicle_id),
+                    (
+                        waypoint for waypoint in mission.waypoints
+                        if waypoint.vehicle_id is None or waypoint.vehicle_id == vehicle_id
+                    ),
                     key=lambda waypoint: waypoint.sequence,
                 )
             )

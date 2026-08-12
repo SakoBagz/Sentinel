@@ -63,8 +63,17 @@ async def events(
 async def replay(
     run_id: UUID, start_ms: int | None = Query(default=None, ge=0), end_ms: int | None = Query(default=None, ge=0),
     limit: int = Query(default=1_000, ge=1, le=5_000), cursor: int | None = Query(default=None, ge=0), vehicle_id: UUID | None = None,
+    downsample: bool = Query(default=False),
     session: AsyncSession = Depends(get_db_session),
 ) -> TelemetryPage:
+    if downsample:
+        try:
+            items = await history_service.replay_sample(
+                session, run_id, start_ms=start_ms, end_ms=end_ms, limit=limit, vehicle_id=vehicle_id,
+            )
+            return TelemetryPage(items=[TelemetryRead.model_validate(item) for item in items], next_cursor=None)
+        except RunNotFound as exc:
+            raise HTTPException(status_code=404, detail="Run not found") from exc
     return await telemetry(run_id, start_ms, end_ms, limit, cursor, vehicle_id, session)
 
 

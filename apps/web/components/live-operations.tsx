@@ -217,7 +217,12 @@ export function LiveOperations({ runId }: { runId: string }) {
           if (!envelope.success) return;
           const telemetry = telemetryFromEnvelope(envelope.data);
           if (telemetry) ingestTelemetry(telemetry);
-          if (!telemetry && envelope.data.type !== "vehicle.telemetry") ingestEvent({ eventId: envelope.data.event_id, type: envelope.data.type, severity: envelope.data.severity ?? "INFO", vehicleId: envelope.data.vehicle_id ?? null, simTimeMs: envelope.data.sim_time_ms, payload: envelope.data.payload });
+          if (!telemetry && envelope.data.type !== "vehicle.telemetry") {
+            ingestEvent({ eventId: envelope.data.event_id, type: envelope.data.type, severity: envelope.data.severity ?? "INFO", vehicleId: envelope.data.vehicle_id ?? null, simTimeMs: envelope.data.sim_time_ms, payload: envelope.data.payload });
+            if (envelope.data.type === "mission.completed" || envelope.data.type === "mission.aborted") {
+              getRun(runId).then(setRun).catch(() => { /* telemetry remains visible if status refresh fails */ });
+            }
+          }
         } catch { setError("Received an invalid realtime message"); }
       };
       socket.onclose = () => {
@@ -259,7 +264,7 @@ export function LiveOperations({ runId }: { runId: string }) {
   const selected = selectedVehicleId ? vehicles[selectedVehicleId] : Object.values(vehicles)[0];
   if (!run) return <main className="main"><div className="card">{error ?? "Loading run…"}</div></main>;
   const inject = async () => {
-    const vehicleId = selectedVehicleId ?? run.vehicles[0]?.id;
+    const vehicleId = selected?.vehicleId ?? run.vehicles[0]?.id;
     if (!vehicleId) return;
     setError(null);
     try { await createFailure(runId, { vehicle_id: vehicleId, failure_type: failureType, duration_ms: failureDuration * 1000 }); }

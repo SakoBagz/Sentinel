@@ -153,10 +153,11 @@ Every accepted injection produces `failure.injected`; clearing it produces
 
 ### `GET /api/runs/{run_id}/replay`
 
-Returns replay metadata plus bounded telemetry/event data for a requested time window.
-It accepts `start_ms`, `end_ms`, `vehicle_id`, `limit`, `cursor`, and an optional
-`sample_rate_hz`/downsample hint. The server returns persisted data, not a newly
-executed simulation.
+Returns bounded telemetry data for a requested time window. It accepts `start_ms`,
+`end_ms`, `vehicle_id`, `limit`, `cursor`, and `downsample`. With
+`downsample=true`, the server returns representative persisted samples across the
+full requested window, preserving each vehicle's first and last available state.
+The server never executes a new simulation for replay.
 
 ## AI endpoints
 

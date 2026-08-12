@@ -2,17 +2,18 @@ from __future__ import annotations
 
 from uuid import UUID
 
-from sqlalchemy import and_, or_, select
+from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
 
-from app.api.schemas import FailureCreate, MissionCreate, RunCreate, VehicleCreate, WaypointCreate
-from app.db.models.entities import Mission, MissionVehicle, SimulationRun
-from app.domain.enums import FailureType, MissionStatus, RunStatus
+from app.api.schemas import FailureCreate, MissionCreate, RunCreate
+from app.db.models.entities import Mission, MissionVehicle, SimulationRun, VehicleDefinition, Waypoint
+from app.domain.enums import FailureType, MissionStatus, RunStatus, WaypointAction
 from app.services import failure_service, mission_service, run_service
 
 DEMO_SCENARIO = "angeles_forest_survey"
 DEMO_NAME = "Angeles Forest Survey"
+DEMO_DESCRIPTION = "Deterministic benign wildfire and environmental survey scenario."
 DEMO_SEED = 20260812
 
 
@@ -28,14 +29,9 @@ async def _find_demo_mission(session: AsyncSession) -> Mission | None:
     result = await session.scalar(
         select(Mission.id)
         .where(
-            or_(
-                Mission.scenario_type == DEMO_SCENARIO,
-                Mission.name == DEMO_NAME,
-                and_(
-                    Mission.scenario_type == "environmental_survey",
-                    Mission.name.ilike("%Angeles Forest%"),
-                ),
-            )
+            Mission.scenario_type == DEMO_SCENARIO,
+            Mission.name == DEMO_NAME,
+            Mission.description == DEMO_DESCRIPTION,
         )
         .order_by(Mission.updated_at.desc())
         .limit(1)
@@ -78,7 +74,7 @@ async def _ensure_demo_mission(session: AsyncSession) -> Mission:
             session,
             MissionCreate(
                 name=DEMO_NAME,
-                description="Deterministic benign wildfire and environmental survey scenario.",
+                description=DEMO_DESCRIPTION,
                 scenario_type=DEMO_SCENARIO,
             ),
         )
@@ -90,64 +86,80 @@ async def _ensure_demo_mission(session: AsyncSession) -> Mission:
             mission.scenario_type = DEMO_SCENARIO
             await session.commit()
 
-    existing_by_callsign = {
+    existing_by_callsign: dict[str, MissionVehicle] = {
         membership.vehicle_definition.callsign: membership
         for membership in mission.vehicle_memberships
     }
+    desired_vehicles = [_demo_vehicle(index) for index in range(1, 26)]
+    missing_callsigns = [callsign for callsign, _, _ in desired_vehicles if callsign not in existing_by_callsign]
+    reusable_definitions = {
+        definition.callsign: definition
+        for definition in (
+            await session.execute(
+                select(VehicleDefinition).where(VehicleDefinition.callsign.in_(missing_callsigns))
+            )
+        ).scalars()
+    } if missing_callsigns else {}
+    new_memberships: list[MissionVehicle] = []
     for index in range(1, 26):
         callsign, latitude, longitude = _demo_vehicle(index)
         if callsign not in existing_by_callsign:
-            await mission_service.add_vehicle(
-                session,
-                mission.id,
-                VehicleCreate(
+            configuration = {
+                "return_battery_threshold": 25,
+                "network_profile": {
+                    "base_latency_ms": 50,
+                    "jitter_ms": 10,
+                    "packet_loss_percent": 1,
+                    "duplicate_percent": 0.5,
+                },
+            }
+            definition = reusable_definitions.get(callsign)
+            if definition is None:
+                definition = VehicleDefinition(
                     callsign=callsign,
                     vehicle_type="SURVEY",
                     max_speed_mps=25,
                     cruise_speed_mps=12,
                     battery_capacity=100,
                     telemetry_rate_hz=5,
-                    starting_latitude=latitude,
-                    starting_longitude=longitude,
-                    starting_altitude_m=100,
-                    configuration={
-                        "return_battery_threshold": 25,
-                        "network_profile": {
-                            "base_latency_ms": 50,
-                            "jitter_ms": 10,
-                            "packet_loss_percent": 1,
-                            "duplicate_percent": 0.5,
-                        },
-                    },
-                ),
+                    configuration=configuration,
+                )
+            membership = MissionVehicle(
+                mission_id=mission.id,
+                vehicle_definition=definition,
+                starting_latitude=latitude,
+                starting_longitude=longitude,
+                starting_altitude_m=100,
+                configuration=configuration,
             )
+            session.add(membership)
+            new_memberships.append(membership)
 
-    mission = await _load_mission(session, mission.id)
+    if new_memberships:
+        await session.flush()
+        existing_by_callsign.update(
+            {membership.vehicle_definition.callsign: membership for membership in new_memberships}
+        )
+
     existing_routes = {(waypoint.vehicle_id, waypoint.sequence) for waypoint in mission.waypoints}
     for index in range(1, 26):
         callsign, latitude, longitude = _demo_vehicle(index)
-        membership = next(
-            item
-            for item in mission.vehicle_memberships
-            if item.vehicle_definition.callsign == callsign
-        )
+        membership = existing_by_callsign[callsign]
         for sequence, offset in enumerate((0.008, 0.012, 0.005)):
             if (membership.id, sequence) in existing_routes:
                 continue
-            await mission_service.add_waypoint(
-                session,
-                mission.id,
-                WaypointCreate(
-                    vehicle_id=membership.id,
-                    sequence=sequence,
-                    latitude=latitude + offset,
-                    longitude=longitude + (0.001 if sequence % 2 == 0 else -0.001),
-                    altitude_m=110 + sequence * 5,
-                    target_speed_mps=12,
-                    arrival_radius_m=10,
-                    action="SURVEY" if sequence == 1 else "TRANSIT",
-                ),
-            )
+            session.add(Waypoint(
+                mission_id=mission.id,
+                vehicle_id=membership.id,
+                sequence=sequence,
+                latitude=latitude + offset,
+                longitude=longitude + (0.001 if sequence % 2 == 0 else -0.001),
+                altitude_m=110 + sequence * 5,
+                target_speed_mps=12,
+                arrival_radius_m=10,
+                action=WaypointAction.SURVEY if sequence == 1 else WaypointAction.TRANSIT,
+            ))
+    await session.commit()
     return await _load_mission(session, mission.id)
 
 

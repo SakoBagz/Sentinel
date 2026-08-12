@@ -1,6 +1,6 @@
 # Sentinel Replay Architecture
 
-Status: Phase 14 implementation baseline
+Status: Phase 15 operational baseline
 Date: 2026-08-12
 
 ## Principle
@@ -24,7 +24,9 @@ The route is:
 ```
 
 The API is `GET /api/runs/{run_id}/replay` with `start_ms`, `end_ms`, `vehicle_id`,
-`limit`, `cursor`, and optional downsample parameters.
+`limit`, `cursor`, and the optional `downsample` flag. The browser requests a
+bounded full-window downsample so long runs remain seekable through their final
+persisted timestamp without loading every telemetry row.
 
 ## Playback model
 
@@ -72,8 +74,8 @@ jump to an event. The simulation engine must not be invoked by any replay action
 
 - Interpolation is browser-side presentation logic; REST remains the source of
   persisted samples and events.
-- History responses are bounded and cursor-paginated. Analyst telemetry uses a
-  bounded stride derived from the sampling hint; replay preserves the returned
-  persisted sampling policy.
+- History responses are bounded and cursor-paginated. Full-window replay uses a
+  per-vehicle bounded stride that preserves first and last samples; raw history
+  queries remain cursor-paginated.
 - Replay represents durable history only; transient live messages that were not
   persisted are not presented as historical facts.

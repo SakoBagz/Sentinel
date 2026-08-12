@@ -34,20 +34,19 @@ test("runs the browser golden path through live telemetry, replay, and debrief",
       starting_altitude_m: 100,
     },
   }));
-  await json(await request.post(`${apiBase}/api/missions/${mission.id}/waypoints`, {
-    data: {
-      vehicle_id: vehicle.id,
-      sequence: 0,
-      latitude: 34.152,
-      longitude: -118.24,
-      altitude_m: 105,
-      arrival_radius_m: 10,
-      action: "SURVEY",
-    },
-  }));
-
   await page.goto(`/missions/${mission.id}/plan`);
   await expect(page.getByText(`E2E-${suffix}`)).toBeVisible();
+  await expect(page.getByRole("button", { name: "Start simulation" })).toBeDisabled();
+  const map = page.locator(".map-canvas.maplibregl-map");
+  await expect(map).toBeVisible();
+  const mapBox = await map.boundingBox();
+  expect(mapBox).not.toBeNull();
+  await map.click({ position: { x: mapBox!.width / 2, y: mapBox!.height / 2 - 2 } });
+  await expect.poll(async () => {
+    const response = await request.get(`${apiBase}/api/missions/${mission.id}`);
+    return (await response.json() as { waypoints: unknown[] }).waypoints.length;
+  }).toBe(1);
+  await expect(page.getByRole("button", { name: "Start simulation" })).toBeEnabled();
   await page.getByRole("button", { name: "Start simulation" }).click();
   await expect(page).toHaveURL(/\/runs\/[^/]+\/live/, { timeout: 15_000 });
   const runId = page.url().match(/\/runs\/([^/]+)\/live/)?.[1];
@@ -59,10 +58,14 @@ test("runs the browser golden path through live telemetry, replay, and debrief",
   await page.getByRole("button", { name: "Inject failure" }).click();
   await expect.poll(async () => (await request.get(`${apiBase}/api/runs/${runId}`)).json(), { timeout: 60_000 })
     .toMatchObject({ status: "COMPLETED" });
+  await expect(page.getByLabel("Run status COMPLETED")).toBeVisible({ timeout: 10_000 });
 
   await page.goto(`/runs/${runId}/replay`);
   await expect(page.getByText("Historical mission")).toBeVisible();
   await expect(page.getByText(/Samples loaded/)).toBeVisible();
+  const replayTime = page.getByLabel("Replay time");
+  await page.getByText("mission.completed", { exact: true }).click();
+  await expect.poll(async () => replayTime.inputValue()).toBe(await replayTime.getAttribute("max"));
 
   await page.goto(`/runs/${runId}/debrief`);
   await expect(page.getByText("Operational summary")).toBeVisible();

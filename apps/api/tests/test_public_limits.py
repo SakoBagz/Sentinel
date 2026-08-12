@@ -19,6 +19,11 @@ def test_public_demo_enforces_vehicle_rate_and_run_limits(client) -> None:
             json={"callsign": "UAV-LIMIT-1", "telemetry_rate_hz": 5},
         )
         assert vehicle.status_code == 201
+        waypoint = client.post(
+            f"/api/missions/{mission['id']}/waypoints",
+            json={"vehicle_id": vehicle.json()["id"], "sequence": 0, "latitude": 34.15, "longitude": -118.24, "altitude_m": 100},
+        )
+        assert waypoint.status_code == 201
         session_headers = {"X-Session-Id": "public-limit-test"}
         first = client.post(f"/api/missions/{mission['id']}/runs", json={}, headers=session_headers)
         assert first.status_code == 201

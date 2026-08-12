@@ -1,3 +1,4 @@
+from dataclasses import replace
 from uuid import UUID, uuid4
 
 from app.domain.enums import EventType, VehicleMissionState, WaypointAction
@@ -60,3 +61,15 @@ def test_telemetry_sequences_are_monotonic_per_vehicle() -> None:
     sequences = [sample.sequence for sample in result.telemetry if sample.vehicle_id == vehicle_id]
     assert sequences == list(range(len(sequences)))
 
+
+def test_shared_waypoint_is_applied_to_every_vehicle() -> None:
+    mission, _, first_vehicle_id = make_mission()
+    second_vehicle_id = UUID("00000000-0000-0000-0000-000000000005")
+    second_vehicle = replace(mission.vehicles[0], id=second_vehicle_id, callsign="UAV-002")
+    shared_waypoint = replace(mission.waypoints[0], vehicle_id=None)
+    shared_mission = replace(mission, vehicles=(mission.vehicles[0], second_vehicle), waypoints=(shared_waypoint,))
+    result = SimulationEngine(shared_mission, uuid4(), 42).run()
+    snapshots = {snapshot.vehicle_id: snapshot for snapshot in result.vehicles}
+    assert result.completed
+    assert snapshots[first_vehicle_id].current_waypoint_index == 1
+    assert snapshots[second_vehicle_id].current_waypoint_index == 1
