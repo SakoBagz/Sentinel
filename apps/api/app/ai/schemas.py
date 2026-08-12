@@ -30,3 +30,4 @@ class AnalystContext(BaseModel):
     mission_events: list[dict[str, Any]] = Field(default_factory=list, max_length=100)
     vehicle_summaries: list[dict[str, Any]] = Field(default_factory=list, max_length=20)
     network_statistics: dict[str, Any] | None = None
+    conversation_context: list[dict[str, Any]] = Field(default_factory=list, max_length=10)

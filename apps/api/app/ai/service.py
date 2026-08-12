@@ -48,7 +48,13 @@ class AnalystService:
         recent.append(now)
         self._counts[key] += 1
 
-    async def _context(self, session: AsyncSession, run_id: UUID, message: str) -> AnalystContext:
+    async def _context(
+        self,
+        session: AsyncSession,
+        run_id: UUID,
+        message: str,
+        conversation_context: list[dict[str, object]],
+    ) -> AnalystContext:
         run = await get_run(session, run_id)
         summary = await tools.get_run_summary(session, run_id)
         event_page = await tools.get_mission_events(session, run_id)
@@ -65,6 +71,7 @@ class AnalystService:
             mission_events=event_page["items"],
             vehicle_summaries=vehicle_summaries,
             network_statistics=network_statistics,
+            conversation_context=conversation_context,
         )
 
     @staticmethod
@@ -85,7 +92,7 @@ class AnalystService:
         session_key: str,
     ) -> AnalystResult:
         self._consume(run_id, session_key)
-        context = await self._context(session, run_id, request.message)
+        context = await self._context(session, run_id, request.message, request.conversation_context)
         provider = provider_for(get_settings().ai_provider, get_settings().gemini_api_key)
         result = await provider.analyze(run_id, request.message, context)
         if result.run_id != run_id:

@@ -1,3 +1,4 @@
+import json
 from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
@@ -240,6 +241,13 @@ class MetricsRead(APIModel):
 class AnalystRequest(APIModel):
     message: str = Field(min_length=1, max_length=2_000)
     conversation_context: list[dict[str, Any]] = Field(default_factory=list, max_length=10)
+
+    @field_validator("conversation_context")
+    @classmethod
+    def bounded_context(cls, value: list[dict[str, Any]]) -> list[dict[str, Any]]:
+        if sum(len(json.dumps(item, separators=(",", ":"))) for item in value) > 10_000:
+            raise ValueError("conversation_context must be at most 10,000 JSON characters")
+        return value
 
 
 class EvidenceRead(APIModel):

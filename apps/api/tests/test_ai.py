@@ -29,7 +29,10 @@ def test_mock_analyst_endpoint_is_read_only_and_structured(client) -> None:
 
     response = client.post(
         f"/api/runs/{run['id']}/assistant",
-        json={"message": "Summarize this run"},
+        json={
+            "message": "Summarize this run",
+            "conversation_context": [{"role": "user", "content": "Keep the answer concise."}],
+        },
         headers={"X-Session-Id": "analyst-test-structured"},
     )
 

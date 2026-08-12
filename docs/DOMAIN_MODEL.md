@@ -1,6 +1,6 @@
 # Sentinel Domain Model
 
-Status: Phase 0 design baseline  
+Status: Phase 12 implementation baseline
 Date: 2026-08-12
 
 ## Core terms

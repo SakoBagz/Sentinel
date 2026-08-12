@@ -138,6 +138,10 @@ returned by a provider is checked against event IDs retrieved for the requested 
 before it reaches the API response. A bounded in-process session/run quota and a
 one-request-per-second guard protect public/demo usage; both are server-side.
 
+Assistant requests may include up to ten bounded conversation-context objects. The
+context is passed to the provider as conversational context only; mission facts still
+come from the read-only tools and evidence validator.
+
 ## Provider failure handling
 
 Quota exhaustion, network errors, provider outages, malformed structured output, and

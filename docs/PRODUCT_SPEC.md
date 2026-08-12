@@ -1,6 +1,6 @@
 # Sentinel Product Specification
 
-Status: Phase 0 design baseline  
+Status: Phase 12 implementation baseline
 Date: 2026-08-12  
 Source: Sentinel Master Engineering Specification & Coding-Agent Constitution
 
