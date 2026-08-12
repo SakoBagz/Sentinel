@@ -140,6 +140,10 @@ export type TelemetrySample = z.infer<typeof telemetrySchema>;
 export type MissionEvent = z.infer<typeof eventSchema>;
 export type RunMetrics = z.infer<typeof metricsSchema>;
 
+const analystEvidenceSchema = z.object({ event_id: z.string(), vehicle_id: z.string().nullable(), sim_time_ms: z.number() });
+const analystSchema = z.object({ run_id: z.string(), answer: z.string(), confidence: z.enum(["high", "medium", "low"]), evidence: z.array(analystEvidenceSchema), limitations: z.array(z.string()), provider: z.string(), model: z.string().nullable(), sections: z.record(z.string(), z.string()) });
+export type AnalystResponse = z.infer<typeof analystSchema>;
+
 export async function getReplay(runId: string, startMs = 0, endMs?: number): Promise<TelemetrySample[]> {
   const query = new URLSearchParams({ start_ms: String(startMs), limit: "5000" });
   if (endMs !== undefined) query.set("end_ms", String(endMs));
@@ -154,4 +158,12 @@ export async function getEvents(runId: string): Promise<MissionEvent[]> {
 
 export async function getMetrics(runId: string): Promise<RunMetrics> {
   return request(`/api/runs/${runId}/metrics`, undefined, metricsSchema);
+}
+
+export async function askAnalyst(runId: string, message: string): Promise<AnalystResponse> {
+  return request(`/api/runs/${runId}/assistant`, { method: "POST", body: JSON.stringify({ message }) }, analystSchema);
+}
+
+export async function getDebrief(runId: string): Promise<AnalystResponse> {
+  return request(`/api/runs/${runId}/debrief`, { method: "POST" }, analystSchema);
 }

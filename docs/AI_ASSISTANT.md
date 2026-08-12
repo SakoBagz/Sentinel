@@ -1,6 +1,6 @@
 # Sentinel AI Mission Analyst
 
-Status: Phase 0 design baseline  
+Status: Phase 8 implementation baseline
 Date: 2026-08-12
 
 ## Role and boundary
@@ -132,6 +132,12 @@ must not become tactical or weapons guidance.
 development, tests, and seeded-demo stability. It must not pretend to be live AI.
 `AI_PROVIDER=disabled` returns an explicit unavailable response without a network call.
 
+The current implementation provides `mock`, `disabled`, and an optional Gemini HTTP
+adapter behind the provider port. The mock provider is the CI/default path. Evidence
+returned by a provider is checked against event IDs retrieved for the requested run
+before it reaches the API response. A bounded in-process session/run quota and a
+one-request-per-second guard protect public/demo usage; both are server-side.
+
 ## Provider failure handling
 
 Quota exhaustion, network errors, provider outages, malformed structured output, and
@@ -151,4 +157,3 @@ are manual or separately gated and never required for ordinary CI.
 - Confirm the Gemini SDK and structured-output mode during Phase 8 dependency review.
 - Define the exact quota/rate-limit storage mechanism for anonymous public sessions.
 - Decide whether generated debriefs are cached/reused by run and prompt version.
-

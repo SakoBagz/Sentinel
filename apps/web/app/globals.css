@@ -86,4 +86,11 @@ button { font: inherit; }
 .replay-vehicle span { color: var(--muted); }
 .replay-lower { margin-top: 14px; }
 .debrief-sequence { margin-top: 14px; max-width: 460px; }
+.analyst-panel { margin-top: 14px; }
+.analyst-actions { display: grid; gap: 12px; margin-top: 14px; }
+.analyst-result { margin-top: 18px; padding-top: 18px; border-top: 1px solid var(--line); }
+.analyst-section { margin-top: 14px; padding-top: 12px; border-top: 1px solid var(--line); }
+.analyst-section p { margin-top: 6px; }
+.evidence-list { display: grid; gap: 8px; margin-top: 18px; }
+.event.highlighted { outline: 2px solid var(--accent); }
 @media (max-width: 900px) { .grid { grid-template-columns: 1fr; } .workspace { grid-template-columns: 1fr; } .rail, .inspector { border: 0; border-bottom: 1px solid var(--line); } .map { min-height: 380px; } }

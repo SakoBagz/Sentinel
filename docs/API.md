@@ -156,6 +156,11 @@ Assistant requests contain a user message and optional conversation context with
 bounded size. Responses follow the structured schema in `AI_ASSISTANT.md`. Quota,
 rate, and provider errors are explicit and do not fail core run/replay endpoints.
 
+The response includes `run_id`, `answer`, controlled `confidence`, bounded `evidence`
+references, `limitations`, provider/model metadata, and optional structured debrief
+`sections`. The UI renders text only and turns evidence into replay links; it does not
+render provider HTML.
+
 ## Error envelope
 
 The baseline error shape is:
@@ -195,4 +200,3 @@ these limits but cannot be the enforcement point.
   run.
 - Define session identity/rate limiting for anonymous public demo users.
 - Decide whether REST uses cursor-only pagination or supports offset for small lists.
-

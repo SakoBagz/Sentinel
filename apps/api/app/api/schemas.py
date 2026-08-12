@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Any
+from typing import Any, Literal
 from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -213,3 +213,25 @@ class MetricsRead(APIModel):
     latency_p50_ms: float
     latency_p95_ms: float
     latency_p99_ms: float
+
+
+class AnalystRequest(APIModel):
+    message: str = Field(min_length=1, max_length=2_000)
+    conversation_context: list[dict[str, Any]] = Field(default_factory=list, max_length=10)
+
+
+class EvidenceRead(APIModel):
+    event_id: UUID
+    vehicle_id: UUID | None = None
+    sim_time_ms: int = Field(ge=0)
+
+
+class AnalystResponse(APIModel):
+    run_id: UUID
+    answer: str
+    confidence: Literal["high", "medium", "low"]
+    evidence: list[EvidenceRead] = Field(default_factory=list, max_length=20)
+    limitations: list[str] = Field(default_factory=list, max_length=20)
+    provider: str
+    model: str | None = None
+    sections: dict[str, str] = Field(default_factory=dict)

@@ -11,7 +11,8 @@ The repository is being implemented phase-by-phase from the master specification
 The authoritative design contracts are in [`docs/`](docs/), and engineering rules are
 in [`AGENTS.md`](AGENTS.md). Mission planning, deterministic simulation, realtime
 delivery, failure injection, durable replay, metrics, and local benchmark harnesses
-are implemented; the read-only Mission Analyst and deployment hardening follow.
+are implemented, as is the provider-neutral read-only Mission Analyst with mock and
+optional Gemini adapters; deployment hardening follows.
 
 ## Local development
 
