@@ -1,0 +1,139 @@
+from datetime import datetime
+from typing import Any
+from uuid import UUID
+
+from pydantic import BaseModel, ConfigDict, Field, field_validator
+
+from app.domain.enums import MissionStatus, RunStatus, WaypointAction
+
+
+class APIModel(BaseModel):
+    model_config = ConfigDict(from_attributes=True, use_enum_values=True)
+
+
+class MissionCreate(APIModel):
+    name: str = Field(min_length=1, max_length=200)
+    description: str | None = None
+    scenario_type: str | None = Field(default=None, max_length=100)
+
+
+class MissionUpdate(APIModel):
+    name: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = None
+    scenario_type: str | None = Field(default=None, max_length=100)
+
+
+class VehicleCreate(APIModel):
+    callsign: str = Field(min_length=1, max_length=100)
+    vehicle_type: str = Field(default="SURVEY", min_length=1, max_length=100)
+    max_speed_mps: float = Field(default=25.0, gt=0)
+    cruise_speed_mps: float = Field(default=18.0, gt=0)
+    battery_capacity: float = Field(default=100.0, gt=0)
+    telemetry_rate_hz: float = Field(default=10.0, gt=0)
+    starting_latitude: float | None = Field(default=None, ge=-90, le=90)
+    starting_longitude: float | None = Field(default=None, ge=-180, le=180)
+    starting_altitude_m: float | None = Field(default=None, ge=0)
+    configuration: dict[str, Any] = Field(default_factory=dict)
+
+    @field_validator("cruise_speed_mps")
+    @classmethod
+    def cruise_not_above_max(cls, value: float, info: Any) -> float:
+        max_speed = info.data.get("max_speed_mps")
+        if max_speed is not None and value > max_speed:
+            raise ValueError("cruise_speed_mps cannot exceed max_speed_mps")
+        return value
+
+
+class VehicleRead(APIModel):
+    id: UUID
+    vehicle_definition_id: UUID
+    callsign: str
+    vehicle_type: str
+    max_speed_mps: float
+    cruise_speed_mps: float
+    battery_capacity: float
+    telemetry_rate_hz: float
+    starting_latitude: float | None
+    starting_longitude: float | None
+    starting_altitude_m: float | None
+    configuration: dict[str, Any]
+
+
+class WaypointCreate(APIModel):
+    vehicle_id: UUID | None = None
+    sequence: int = Field(ge=0)
+    latitude: float = Field(ge=-90, le=90)
+    longitude: float = Field(ge=-180, le=180)
+    altitude_m: float = Field(ge=0)
+    target_speed_mps: float | None = Field(default=None, gt=0)
+    arrival_radius_m: float | None = Field(default=None, gt=0)
+    action: WaypointAction = WaypointAction.TRANSIT
+
+
+class WaypointUpdate(APIModel):
+    vehicle_id: UUID | None = None
+    sequence: int | None = Field(default=None, ge=0)
+    latitude: float | None = Field(default=None, ge=-90, le=90)
+    longitude: float | None = Field(default=None, ge=-180, le=180)
+    altitude_m: float | None = Field(default=None, ge=0)
+    target_speed_mps: float | None = Field(default=None, gt=0)
+    arrival_radius_m: float | None = Field(default=None, gt=0)
+    action: WaypointAction | None = None
+
+
+class WaypointRead(APIModel):
+    id: UUID
+    mission_id: UUID
+    vehicle_id: UUID | None
+    sequence: int
+    latitude: float
+    longitude: float
+    altitude_m: float
+    target_speed_mps: float | None
+    arrival_radius_m: float | None
+    action: WaypointAction
+
+
+class MissionRead(APIModel):
+    id: UUID
+    name: str
+    description: str | None
+    scenario_type: str | None
+    status: MissionStatus
+    created_at: datetime
+    updated_at: datetime
+    vehicles: list[VehicleRead] = Field(default_factory=list)
+    waypoints: list[WaypointRead] = Field(default_factory=list)
+
+
+class MissionList(APIModel):
+    items: list[MissionRead]
+    next_cursor: str | None = None
+
+
+class RunCreate(APIModel):
+    random_seed: int | None = None
+    simulation_speed: float = Field(default=1.0, gt=0)
+
+
+class RunVehicleRead(APIModel):
+    id: UUID
+    vehicle_definition_id: UUID
+    callsign: str
+    starting_latitude: float | None
+    starting_longitude: float | None
+    starting_altitude_m: float | None
+
+
+class RunRead(APIModel):
+    id: UUID
+    mission_id: UUID
+    status: RunStatus
+    random_seed: int
+    simulation_speed: float
+    configuration: dict[str, Any]
+    started_at: datetime | None
+    completed_at: datetime | None
+    created_at: datetime
+    vehicles: list[RunVehicleRead] = Field(default_factory=list)
+

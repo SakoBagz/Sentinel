@@ -2,13 +2,17 @@
   "name": "sentinel",
   "private": true,
   "version": "0.1.0",
-  "workspaces": ["apps/web"],
+  "workspaces": [
+    "apps/web"
+  ],
   "scripts": {
     "dev:web": "npm --workspace apps/web run dev",
     "build": "npm --workspace apps/web run build",
     "lint": "npm --workspace apps/web run lint",
     "typecheck": "npm --workspace apps/web run typecheck",
     "test:web": "npm --workspace apps/web run test"
+  },
+  "dependencies": {
+    "maplibre-gl": "^6.3.0"
   }
 }
-

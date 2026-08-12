@@ -9,7 +9,7 @@ class Settings(BaseSettings):
     app_name: str = "Sentinel API"
     api_host: str = "0.0.0.0"
     api_port: int = 8000
-    database_url: str = "postgresql+asyncpg://sentinel:sentinel@localhost:5432/sentinel"
+    database_url: str = "postgresql+asyncpg://sentinel:sentinel@localhost:55432/sentinel"
     redis_url: str = "redis://localhost:6379/0"
     public_demo: bool = False
     sim_max_vehicles: int = Field(default=1000, ge=1)
@@ -38,4 +38,3 @@ class Settings(BaseSettings):
 @lru_cache(maxsize=1)
 def get_settings() -> Settings:
     return Settings()
-

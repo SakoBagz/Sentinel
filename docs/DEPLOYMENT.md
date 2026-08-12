@@ -20,8 +20,10 @@ docker compose up -d
 make dev
 ```
 
-The exact service names, ports, health checks, and volumes will be implemented in
-Phase 1. Local mode defaults to `PUBLIC_DEMO=false`, up to 1,000 simulated vehicles,
+The service names, ports, health checks, and volumes are defined in
+`docker-compose.yml`. The host PostgreSQL port defaults to `55432` to avoid colliding
+with an existing local PostgreSQL installation; the container still listens on `5432`.
+Local mode defaults to `PUBLIC_DEMO=false`, up to 1,000 simulated vehicles,
 10 Hz telemetry, and 2 Hz durable persistence.
 
 ## Public portfolio profile
@@ -121,4 +123,3 @@ metrics, and use AI when quota is available. No paid infrastructure is required.
 - Define anonymous session/rate-limiting storage.
 - Decide whether a public demo may run the simulator in the backend web service or
   requires a separate bounded worker process.
-
