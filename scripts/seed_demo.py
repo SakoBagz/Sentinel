@@ -31,10 +31,10 @@ def main() -> None:
             "scenario_type": "environmental_survey",
         })
         vehicle_ids: list[str] = []
-        starts = [(34.1500, -118.2400), (34.1520, -118.2430), (34.1480, -118.2370)]
-        for index, (latitude, longitude) in enumerate(starts, start=1):
+        starts = [("UAV-07", 34.1500, -118.2400), ("UAV-12", 34.1520, -118.2430), ("UAV-18", 34.1480, -118.2370)]
+        for callsign, latitude, longitude in starts:
             vehicle = request(client, "POST", f"/api/missions/{mission['id']}/vehicles", json={
-                "callsign": f"UAV-{index:02d}",
+                "callsign": callsign,
                 "vehicle_type": "SURVEY",
                 "max_speed_mps": 25,
                 "cruise_speed_mps": 12,
@@ -60,6 +60,24 @@ def main() -> None:
         run = request(client, "POST", f"/api/missions/{mission['id']}/runs", json={"random_seed": 20260812, "simulation_speed": 1.0})
         if args.start:
             run = request(client, "POST", f"/api/runs/{run['id']}/start")
+            run_vehicle_by_callsign = {vehicle["callsign"]: vehicle["id"] for vehicle in run["vehicles"]}
+            request(client, "POST", f"/api/runs/{run['id']}/failures", json={
+                "vehicle_id": run_vehicle_by_callsign["UAV-07"],
+                "failure_type": "COMMUNICATIONS_BLACKOUT",
+                "duration_ms": 10_000,
+            })
+            request(client, "POST", f"/api/runs/{run['id']}/failures", json={
+                "vehicle_id": run_vehicle_by_callsign["UAV-12"],
+                "failure_type": "BATTERY_ANOMALY",
+                "duration_ms": 30_000,
+                "configuration": {"drain_multiplier": 2.0},
+            })
+            request(client, "POST", f"/api/runs/{run['id']}/failures", json={
+                "vehicle_id": run_vehicle_by_callsign["UAV-18"],
+                "failure_type": "PACKET_LOSS",
+                "duration_ms": 20_000,
+                "configuration": {"packet_loss_percent": 50},
+            })
         result = {"mission": mission, "vehicle_ids": vehicle_ids, "run": run}
     encoded = json.dumps(result, indent=2, sort_keys=True)
     print(encoded)

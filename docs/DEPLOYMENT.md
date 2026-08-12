@@ -1,5 +1,8 @@
 # Sentinel Deployment Strategy
 
+The supported JavaScript runtime is pinned to Node 22.x in `.nvmrc`, CI, and the
+Dockerfiles. Node 24 is not the supported local runtime for this Next.js baseline.
+
 Status: Phase 9/10 implementation baseline
 Date: 2026-08-12
 

@@ -16,9 +16,10 @@ optional Gemini adapters; deployment hardening follows.
 
 ## Local development
 
-Requirements: Docker, Python 3.11+ (3.12+ recommended), Node.js 22+, and npm.
+Requirements: Docker, Python 3.11+ (3.12+ recommended), Node.js 22.x, and npm.
 
 ```bash
+nvm use
 cp .env.example .env
 docker compose up -d postgres redis
 python3 -m pip install -r apps/api/requirements.txt
