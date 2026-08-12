@@ -21,7 +21,7 @@ cp .env.example .env
 docker compose up -d postgres redis
 python3 -m pip install -r apps/api/requirements.txt
 npm install
-PYTHONPATH=apps/api uvicorn app.main:app --reload --app-dir apps/api
+PYTHONPATH=apps/api:simulator uvicorn app.main:app --reload --app-dir apps/api
 ```
 
 In another terminal:
@@ -63,4 +63,3 @@ Sentinel supports benign search-and-rescue, wildfire monitoring, infrastructure
 inspection, mapping, environmental survey, and communications-relay scenarios. It does
 not implement weapon control, targeting, strike planning, autonomous engagement,
 firing solutions, or evasion capabilities.
-

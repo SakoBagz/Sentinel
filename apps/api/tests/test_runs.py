@@ -31,8 +31,6 @@ def test_run_creation_and_deterministic_completion(client) -> None:
     assert run["random_seed"] == 1234
     assert UUID(run["vehicles"][0]["id"])
 
-    completed = client.post(f"/api/runs/{run['id']}/start")
-    assert completed.status_code == 200
-    assert completed.json()["status"] == "COMPLETED"
-    assert completed.json()["completed_at"] is not None
-
+    started = client.post(f"/api/runs/{run['id']}/start")
+    assert started.status_code == 200
+    assert started.json()["status"] == "RUNNING"

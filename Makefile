@@ -8,7 +8,7 @@ dev: infra
 	@echo "Run the web app with: npm run dev:web"
 
 api:
-	PYTHONPATH=apps/api uvicorn app.main:app --reload --app-dir apps/api
+	PYTHONPATH=apps/api:simulator uvicorn app.main:app --reload --app-dir apps/api
 
 web:
 	npm run dev:web
@@ -32,4 +32,3 @@ build:
 
 benchmark:
 	PYTHONPATH=apps/api:simulator python3 scripts/benchmark.py --help
-

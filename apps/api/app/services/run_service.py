@@ -146,55 +146,9 @@ async def start_run(session: AsyncSession, run_id: UUID) -> SimulationRun:
     await session.commit()
     await session.refresh(run)
     await session.refresh(run.mission)
-    # The Phase 3 execution is intentionally synchronous; Phase 4 moves delivery to
-    # the event-driven stream pipeline while preserving this engine contract.
-    simulation = SimulationEngine(
-        _mission_to_simulation(run.mission, run),
-        run.id,
-        run.random_seed,
-        telemetry_rate_hz=10.0,
-    ).run()
-    session.add_all(
-        [
-            TelemetrySample(
-                event_id=sample.event_id,
-                run_id=sample.run_id,
-                vehicle_id=sample.vehicle_id,
-                sequence=sample.sequence,
-                sim_time_ms=sample.sim_time_ms,
-                received_at=sample.emitted_at,
-                latitude=sample.payload["latitude"],
-                longitude=sample.payload["longitude"],
-                altitude_m=sample.payload["altitude_m"],
-                heading_deg=sample.payload["heading_deg"],
-                ground_speed_mps=sample.payload["ground_speed_mps"],
-                battery_percent=sample.payload["battery_percent"],
-                mission_state=sample.payload["mission_state"],
-                communications_state=sample.payload["communications_state"],
-            )
-            for sample in simulation.telemetry
-        ]
-    )
-    session.add_all(
-        [
-            MissionEvent(
-                id=event.event_id,
-                run_id=event.run_id,
-                vehicle_id=event.vehicle_id,
-                event_type=event.event_type,
-                severity=event.severity,
-                schema_version=event.schema_version,
-                sim_time_ms=event.sim_time_ms,
-                timestamp=event.timestamp,
-                payload=event.payload,
-            )
-            for event in simulation.events
-        ]
-    )
-    run.status = RunStatus.COMPLETED if simulation.completed else RunStatus.ABORTED
-    run.completed_at = datetime.now(timezone.utc)
-    run.mission.status = MissionStatus.COMPLETED if simulation.completed else MissionStatus.ABORTED
-    await session.commit()
+    from app.realtime.runner import coordinator
+
+    await coordinator.start(run.id)
     return await get_run(session, run_id)
 
 

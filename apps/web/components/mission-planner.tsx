@@ -4,8 +4,9 @@ import "maplibre-gl/dist/maplibre-gl.css";
 
 import * as maplibregl from "maplibre-gl";
 import { useCallback, useEffect, useRef, useState } from "react";
+import { useRouter } from "next/navigation";
 
-import { addVehicle, addWaypoint, getMission, Mission, updateMission } from "@/lib/api";
+import { addVehicle, addWaypoint, createRun, getMission, Mission, updateMission } from "@/lib/api";
 
 type Props = { missionId: string };
 
@@ -21,6 +22,7 @@ export function MissionPlanner({ missionId }: Props) {
   const [callsign, setCallsign] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const router = useRouter();
 
   const reload = useCallback(async () => {
     const loaded = await getMission(missionId);
@@ -111,10 +113,19 @@ export function MissionPlanner({ missionId }: Props) {
     finally { setBusy(false); }
   };
 
+  const startSimulation = async () => {
+    setBusy(true); setError(null);
+    try {
+      const run = await createRun(missionId);
+      router.push(`/runs/${run.id}/live`);
+    } catch (reason: unknown) { setError(reason instanceof Error ? reason.message : "Unable to create run"); }
+    finally { setBusy(false); }
+  };
+
   if (!mission) return <main className="main"><div className="card">{error ?? "Loading mission…"}</div></main>;
   return (
     <main className="main">
-      <div className="planner-heading"><div><div className="eyebrow">Mission planner</div><h1>{mission.name}</h1></div><button className="button primary" disabled={busy} onClick={saveMission}>Save mission</button></div>
+      <div className="planner-heading"><div><div className="eyebrow">Mission planner</div><h1>{mission.name}</h1></div><div className="actions compact"><button className="button" disabled={busy} onClick={saveMission}>Save mission</button><button className="button primary" disabled={busy || mission.vehicles.length === 0} onClick={startSimulation}>Start simulation</button></div></div>
       {error && <div className="notice error">{error}</div>}
       <div className="workspace">
         <aside className="rail"><div className="eyebrow">UAV fleet</div><form className="inline-form" onSubmit={handleAddVehicle}><input aria-label="Callsign" placeholder="UAV-004" value={callsign} onChange={(event) => setCallsign(event.target.value)} /><button className="button" disabled={busy}>Add</button></form><div className="list">{mission.vehicles.map((vehicle) => <button className={`list-item selectable ${selectedVehicle === vehicle.id ? "selected" : ""}`} key={vehicle.id} onClick={() => setSelectedVehicle(vehicle.id)}><strong>{vehicle.callsign}</strong><span>{vehicle.vehicle_type} · {mission.waypoints.filter((item) => item.vehicle_id === vehicle.id).length} waypoints</span></button>)}</div></aside>

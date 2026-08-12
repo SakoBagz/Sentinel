@@ -1,0 +1,58 @@
+import asyncio
+from uuid import UUID
+
+from fastapi import APIRouter, WebSocket, WebSocketDisconnect
+
+from app.realtime.hub import hub
+
+router = APIRouter(tags=["realtime"])
+
+
+@router.websocket("/ws/runs/{run_id}")
+async def run_websocket(websocket: WebSocket, run_id: UUID) -> None:
+    await websocket.accept()
+    session = hub.connect(run_id)
+    send_lock = asyncio.Lock()
+
+    async def send_messages() -> None:
+        while not session.closed:
+            message = await session.queue.get()
+            async with send_lock:
+                await websocket.send_json(message)
+
+    sender = asyncio.create_task(send_messages())
+    try:
+        async with send_lock:
+            await websocket.send_json({"type": "connection.ready", "data": {"run_id": str(run_id)}})
+        while True:
+            try:
+                message = await asyncio.wait_for(websocket.receive_json(), timeout=25)
+            except asyncio.TimeoutError:
+                async with send_lock:
+                    await websocket.send_json({"type": "heartbeat", "data": {"run_id": str(run_id)}})
+                continue
+            message_type = message.get("type") if isinstance(message, dict) else None
+            if message_type == "subscribe":
+                topics = message.get("topics", [])
+                try:
+                    hub.subscribe(session, topics)
+                    async with send_lock:
+                        await websocket.send_json({"type": "subscription.ready", "data": {"topics": sorted(session.topics)}})
+                except ValueError as exc:
+                    async with send_lock:
+                        await websocket.send_json({"type": "subscription.error", "data": {"message": str(exc)}})
+            elif message_type == "ping":
+                async with send_lock:
+                    await websocket.send_json({"type": "pong", "data": {"run_id": str(run_id)}})
+            else:
+                async with send_lock:
+                    await websocket.send_json({"type": "system.warning", "data": {"message": "Unsupported client message"}})
+    except WebSocketDisconnect:
+        pass
+    finally:
+        sender.cancel()
+        try:
+            await sender
+        except asyncio.CancelledError:
+            pass
+        await hub.disconnect(session)

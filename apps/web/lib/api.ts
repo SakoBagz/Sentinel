@@ -46,6 +46,30 @@ export type Mission = z.infer<typeof missionSchema>;
 export type Vehicle = z.infer<typeof vehicleSchema>;
 export type Waypoint = z.infer<typeof waypointSchema>;
 
+const runVehicleSchema = z.object({
+  id: z.string(),
+  vehicle_definition_id: z.string(),
+  callsign: z.string(),
+  starting_latitude: z.number().nullable(),
+  starting_longitude: z.number().nullable(),
+  starting_altitude_m: z.number().nullable(),
+});
+
+export const runSchema = z.object({
+  id: z.string(),
+  mission_id: z.string(),
+  status: z.enum(["READY", "RUNNING", "PAUSED", "COMPLETED", "ABORTED"]),
+  random_seed: z.number(),
+  simulation_speed: z.number(),
+  configuration: z.record(z.string(), z.unknown()),
+  started_at: z.string().nullable(),
+  completed_at: z.string().nullable(),
+  created_at: z.string(),
+  vehicles: z.array(runVehicleSchema),
+});
+
+export type Run = z.infer<typeof runSchema>;
+
 async function request<T>(path: string, init?: RequestInit, schema?: z.ZodType<T>): Promise<T> {
   const response = await fetch(`${apiBase}${path}`, {
     ...init,
@@ -83,5 +107,17 @@ export async function addVehicle(id: string, input: Record<string, unknown>): Pr
 
 export async function addWaypoint(id: string, input: Record<string, unknown>): Promise<Waypoint> {
   return request(`/api/missions/${id}/waypoints`, { method: "POST", body: JSON.stringify(input) }, waypointSchema);
+}
+
+export async function createRun(id: string, input: { random_seed?: number; simulation_speed?: number } = {}): Promise<Run> {
+  return request(`/api/missions/${id}/runs`, { method: "POST", body: JSON.stringify(input) }, runSchema);
+}
+
+export async function getRun(id: string): Promise<Run> {
+  return request(`/api/runs/${id}`, undefined, runSchema);
+}
+
+export async function startRun(id: string): Promise<Run> {
+  return request(`/api/runs/${id}/start`, { method: "POST" }, runSchema);
 }
 
