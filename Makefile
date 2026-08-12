@@ -14,7 +14,7 @@ web:
 	npm run dev:web
 
 test-api:
-	PYTHONPATH=apps/api pytest apps/api/tests simulator/tests
+	PYTHONPATH=apps/api:simulator pytest apps/api/tests simulator/tests scripts/tests
 
 test-web:
 	npm run test:web

@@ -1,5 +1,6 @@
 import asyncio
 import logging
+from time import perf_counter
 from collections.abc import Iterable
 from datetime import datetime, timezone
 
@@ -9,6 +10,7 @@ from sqlalchemy.dialects.sqlite import insert as sqlite_insert
 
 from app.db.models.entities import MissionEvent, TelemetrySample
 from app.db.session import SessionFactory
+from app.observability.metrics import metrics
 from sentinel_sim.models import SimulationEvent, TelemetryEnvelope
 
 logger = logging.getLogger(__name__)
@@ -54,10 +56,12 @@ def _dialect_name(session) -> str:
 
 
 async def persist_batch(items: Iterable[TelemetryEnvelope | SimulationEvent]) -> None:
+    started = perf_counter()
     telemetry = [_telemetry_values(item) for item in items if isinstance(item, TelemetryEnvelope)]
     events = [_event_values(item) for item in items if isinstance(item, SimulationEvent)]
     if not telemetry and not events:
         return
+    persisted_telemetry = 0
     async with SessionFactory() as session:
         try:
             dialect = _dialect_name(session)
@@ -68,18 +72,23 @@ async def persist_batch(items: Iterable[TelemetryEnvelope | SimulationEvent]) ->
                     statement = statement.on_conflict_do_nothing(
                         index_elements=["run_id", "vehicle_id", "sequence"]
                     )
-                await session.execute(statement)
+                result = await session.execute(statement)
+                persisted_telemetry += max(result.rowcount or 0, 0)
             if events:
                 builder = pg_insert if dialect == "postgresql" else sqlite_insert if dialect == "sqlite" else insert
                 statement = builder(MissionEvent).values(events)
                 if hasattr(statement, "on_conflict_do_nothing"):
                     statement = statement.on_conflict_do_nothing(index_elements=["id"])
-                await session.execute(statement)
+                result = await session.execute(statement)
             await session.commit()
         except Exception:
             await session.rollback()
             logger.exception("persistence batch failed")
+            metrics.increment("persistence_errors_total")
             raise
+        finally:
+            metrics.increment("telemetry_messages_persisted_total", persisted_telemetry)
+            metrics.observe("database_batch_write_duration_ms", (perf_counter() - started) * 1000)
 
 
 class PersistenceWorker:

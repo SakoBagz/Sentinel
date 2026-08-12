@@ -1,6 +1,6 @@
 # Sentinel Performance and Benchmarking Plan
 
-Status: Phase 0 design baseline  
+Status: Phase 7 implementation baseline
 Date: 2026-08-12
 
 ## Goals, not claims
@@ -85,10 +85,26 @@ README benchmark tables must state test hardware, local/cloud environment, simul
 settings, and whether the result measures local services or public infrastructure.
 Local benchmark data must never be implied to be cloud production capacity.
 
-## Phase 0 questions
+## Implemented harness
 
-- Choose the metrics library/aggregation implementation during Phase 7 design.
-- Define latency start/end markers precisely (simulator emission to browser receipt is
-  the proposed live metric).
-- Decide whether CPU/memory collection is mandatory on macOS, Linux, and CI.
+`scripts/benchmark.py` runs the standard 100, 250, 500, and 1,000-vehicle profiles
+or a selected profile. `scripts/load_test.py` exposes the requested single-profile
+CLI. Both report generated, delivered, persisted, duplicate, missing, out-of-order,
+throughput, error, CPU, memory, and p50/p95/p99 values. The default harness is an
+in-process simulator plus idempotent sink, so its output is explicitly not a
+PostgreSQL/Redis or cloud-capacity claim. JSON and Markdown output are written only
+when the harness is run; measured result files are intentionally not committed.
 
+The API also exposes `/api/metrics` as a Prometheus-compatible developer diagnostic
+surface. Runtime counters are populated by the coordinator, WebSocket hub, and
+durable persistence worker.
+
+## Implementation decisions
+
+- Runtime diagnostics use a bounded, dependency-free in-process registry with
+  Prometheus-compatible exposition; external observability services are optional.
+- Runtime latency currently measures simulator-to-Redis publish/stream handling on the
+  API path. The benchmark harness reports simulator tick-to-delivery processing time;
+  neither is presented as browser receipt latency.
+- CPU time and peak resident memory are recorded when the host exposes them; missing
+  Docker or host metadata is emitted as `null`, never guessed.

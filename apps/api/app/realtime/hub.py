@@ -6,6 +6,7 @@ from uuid import UUID
 
 from fastapi import WebSocket
 
+from app.observability.metrics import metrics
 from app.realtime.redis import redis_client
 from app.realtime.streams import (
     EVENTS_TOPIC,
@@ -49,6 +50,7 @@ class RealtimeHub:
     def connect(self, run_id: UUID) -> ClientSession:
         session = ClientSession(run_id=run_id)
         self._clients[run_id].add(session)
+        metrics.set_gauge("websocket_connections_active", sum(len(items) for items in self._clients.values()))
         if run_id not in self._stream_tasks:
             self._stream_tasks[run_id] = asyncio.create_task(self._consume_run(run_id))
         return session
@@ -68,6 +70,7 @@ class RealtimeHub:
                     await task
                 except asyncio.CancelledError:
                     pass
+        metrics.set_gauge("websocket_connections_active", sum(len(items) for items in self._clients.values()))
 
     def subscribe(self, session: ClientSession, topics: list[str]) -> None:
         invalid = set(topics) - TOPICS
@@ -110,8 +113,22 @@ class RealtimeHub:
                         elif stream == events_stream_name(run_id):
                             events_id = record.record_id
                             self.broadcast(run_id, EVENTS_TOPIC, {"type": record.data.get("type", "system.warning"), **record.data})
+                    await self._record_stream_lag(stream, telemetry_id if stream == telemetry_stream_name(run_id) else events_id)
         finally:
             self._stream_tasks.pop(run_id, None)
+
+    async def _record_stream_lag(self, stream: str, consumed_id: str) -> None:
+        try:
+            info = await redis_client.xinfo_stream(stream)
+            last_id = info.get("last-generated-id")
+            if not last_id:
+                return
+            latest_ms = int(str(last_id).split("-", 1)[0])
+            consumed_ms = int(str(consumed_id).split("-", 1)[0])
+            metrics.set_gauge("stream_consumer_lag", max(0, latest_ms - consumed_ms))
+        except Exception:
+            # Stream diagnostics must never interrupt delivery.
+            return
 
     async def close(self) -> None:
         tasks = list(self._stream_tasks.values())
@@ -127,6 +144,7 @@ class RealtimeHub:
             for session in clients:
                 session.closed = True
         self._clients.clear()
+        metrics.set_gauge("websocket_connections_active", 0)
 
 
 hub = RealtimeHub()

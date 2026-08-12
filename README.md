@@ -9,8 +9,9 @@ read-only AI mission analysis.
 
 The repository is being implemented phase-by-phase from the master specification.
 The authoritative design contracts are in [`docs/`](docs/), and engineering rules are
-in [`AGENTS.md`](AGENTS.md). The initial executable skeleton is now in place; later
-phases add mission planning, simulation, realtime delivery, replay, metrics, and AI.
+in [`AGENTS.md`](AGENTS.md). Mission planning, deterministic simulation, realtime
+delivery, failure injection, durable replay, metrics, and local benchmark harnesses
+are implemented; the read-only Mission Analyst and deployment hardening follow.
 
 ## Local development
 
@@ -41,6 +42,7 @@ make test-api
 make test-web
 make typecheck
 make build
+PYTHONPATH=apps/api:simulator python3 scripts/load_test.py --vehicles 500 --rate 10 --duration 60
 ```
 
 ## Architecture
