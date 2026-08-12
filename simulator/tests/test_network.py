@@ -54,3 +54,19 @@ def test_packet_loss_is_seeded_and_creates_sequence_gaps() -> None:
     second = SimulationEngine(mission, first.run_id, 123, network_profiles={vehicle_id: profile}).run()
     assert [sample.to_dict() for sample in first.telemetry] == [sample.to_dict() for sample in second.telemetry]
     assert len(first.generated_telemetry) > len(first.telemetry)
+
+
+def test_latency_jitter_preserves_delivery_order_and_exposes_out_of_order_messages() -> None:
+    mission, vehicle_id = _mission()
+    profile = NetworkConfiguration(base_latency_ms=250, jitter_ms=250)
+    result = SimulationEngine(mission, uuid4(), 0, network_profiles={vehicle_id: profile}).run()
+    sequences = [sample.sequence for sample in result.telemetry if sample.vehicle_id == vehicle_id]
+    assert len(sequences) > 10
+    assert any(right < left for left, right in zip(sequences, sequences[1:]))
+
+
+def test_shutdown_flushes_accepted_delayed_messages() -> None:
+    mission, vehicle_id = _mission()
+    profile = NetworkConfiguration(base_latency_ms=10_000)
+    result = SimulationEngine(mission, uuid4(), 3, network_profiles={vehicle_id: profile}).run()
+    assert len(result.telemetry) == len(result.generated_telemetry)

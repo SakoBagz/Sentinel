@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Create the deterministic, benign three-UAV demo mission through the API."""
+"""Create the deterministic, benign 25-UAV demo mission through the API."""
 
 from __future__ import annotations
 
@@ -31,7 +31,10 @@ def main() -> None:
             "scenario_type": "environmental_survey",
         })
         vehicle_ids: list[str] = []
-        starts = [("UAV-07", 34.1500, -118.2400), ("UAV-12", 34.1520, -118.2430), ("UAV-18", 34.1480, -118.2370)]
+        starts = [
+            (f"UAV-{index:02d}", 34.145 + (index % 5) * 0.0015, -118.250 + (index // 5) * 0.0015)
+            for index in range(1, 26)
+        ]
         for callsign, latitude, longitude in starts:
             vehicle = request(client, "POST", f"/api/missions/{mission['id']}/vehicles", json={
                 "callsign": callsign,
@@ -43,10 +46,18 @@ def main() -> None:
                 "starting_latitude": latitude,
                 "starting_longitude": longitude,
                 "starting_altitude_m": 100,
-                "configuration": {"return_battery_threshold": 25},
+                "configuration": {
+                    "return_battery_threshold": 25,
+                    "network_profile": {
+                        "base_latency_ms": 50,
+                        "jitter_ms": 10,
+                        "packet_loss_percent": 1,
+                        "duplicate_percent": 0.5,
+                    },
+                },
             })
             vehicle_ids.append(vehicle["id"])
-            for sequence, offset in enumerate((0.002, 0.004, 0.001)):
+            for sequence, offset in enumerate((0.008, 0.012, 0.005)):
                 request(client, "POST", f"/api/missions/{mission['id']}/waypoints", json={
                     "vehicle_id": vehicle["id"],
                     "sequence": sequence,
@@ -69,8 +80,8 @@ def main() -> None:
             request(client, "POST", f"/api/runs/{run['id']}/failures", json={
                 "vehicle_id": run_vehicle_by_callsign["UAV-12"],
                 "failure_type": "BATTERY_ANOMALY",
-                "duration_ms": 30_000,
-                "configuration": {"drain_multiplier": 2.0},
+                "duration_ms": 90_000,
+                "configuration": {"drain_multiplier": 20.0},
             })
             request(client, "POST", f"/api/runs/{run['id']}/failures", json={
                 "vehicle_id": run_vehicle_by_callsign["UAV-18"],

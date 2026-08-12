@@ -16,13 +16,15 @@ from app.db.models.entities import (
     SimulationRun,
     TelemetrySample,
 )
-from app.domain.enums import MissionStatus, RunStatus
+from app.domain.enums import EventSeverity, EventType, MissionStatus, RunStatus
 from app.services import mission_service
 from app.services.public_limits import ensure_run_allowed
 from sentinel_sim.engine import SimulationEngine
-from sentinel_sim.models import MissionConfiguration, VehicleConfiguration, WaypointConfiguration
+from sentinel_sim.models import MissionConfiguration, SimulationEvent, VehicleConfiguration, WaypointConfiguration, deterministic_id
 from sentinel_sim.navigation import Position
 from sentinel_sim.network import NetworkConfiguration
+from app.realtime.redis import redis_client
+from app.realtime.streams import publish_event
 
 
 class RunNotFound(Exception):
@@ -31,6 +33,32 @@ class RunNotFound(Exception):
 
 class RunConflict(Exception):
     pass
+
+
+async def _record_lifecycle_event(session: AsyncSession, run: SimulationRun, event_type: EventType, sim_time_ms: int) -> SimulationEvent:
+    event = SimulationEvent(
+        mission_id=run.mission_id,
+        run_id=run.id,
+        event_type=event_type,
+        severity=EventSeverity.INFO,
+        sim_time_ms=sim_time_ms,
+        payload={"run_status": run.status.value},
+        event_id=deterministic_id(run.id, event_type.value, 0),
+    )
+    session.add(
+        MissionEvent(
+            id=event.event_id,
+            run_id=event.run_id,
+            vehicle_id=None,
+            event_type=event.event_type,
+            severity=event.severity,
+            schema_version=event.schema_version,
+            sim_time_ms=event.sim_time_ms,
+            timestamp=event.timestamp,
+            payload=event.payload,
+        )
+    )
+    return event
 
 
 def _mission_to_simulation(mission: Mission, run: SimulationRun) -> MissionConfiguration:
@@ -53,9 +81,9 @@ def _mission_to_simulation(mission: Mission, run: SimulationRun) -> MissionConfi
                 battery_capacity=definition.battery_capacity,
                 telemetry_rate_hz=definition.telemetry_rate_hz,
                 starting_position=Position(
-                    membership.starting_latitude or 34.15,
-                    membership.starting_longitude or -118.24,
-                    membership.starting_altitude_m or 100,
+                    membership.starting_latitude if membership.starting_latitude is not None else 34.15,
+                    membership.starting_longitude if membership.starting_longitude is not None else -118.24,
+                    membership.starting_altitude_m if membership.starting_altitude_m is not None else 100,
                 ),
                 return_battery_threshold=float(definition.configuration.get("return_battery_threshold", 25.0)),
                 configuration=membership.configuration,
@@ -195,12 +223,16 @@ async def create_run(session: AsyncSession, mission_id: UUID, payload: RunCreate
 
 async def start_run(session: AsyncSession, run_id: UUID) -> SimulationRun:
     run = await get_run(session, run_id)
+    if run.status is RunStatus.RUNNING:
+        return run
     if run.status is not RunStatus.READY:
         raise RunConflict(f"Run cannot start from {run.status.value}")
     run.status = RunStatus.RUNNING
     run.started_at = datetime.now(timezone.utc)
     run.mission.status = MissionStatus.RUNNING
+    lifecycle_event = await _record_lifecycle_event(session, run, EventType.MISSION_STARTED, 0)
     await session.commit()
+    await publish_event(redis_client, lifecycle_event)
     await session.refresh(run)
     await session.refresh(run.mission)
     from app.realtime.runner import coordinator
@@ -213,9 +245,14 @@ async def pause_run(session: AsyncSession, run_id: UUID) -> SimulationRun:
     run = await get_run(session, run_id)
     if run.status is not RunStatus.RUNNING:
         raise RunConflict(f"Run cannot pause from {run.status.value}")
+    from app.realtime.runner import coordinator
+
+    await coordinator.pause(run_id)
     run.status = RunStatus.PAUSED
     run.mission.status = MissionStatus.PAUSED
+    lifecycle_event = await _record_lifecycle_event(session, run, EventType.MISSION_PAUSED, coordinator.current_time_ms(run_id))
     await session.commit()
+    await publish_event(redis_client, lifecycle_event)
     return await get_run(session, run_id)
 
 
@@ -223,9 +260,14 @@ async def resume_run(session: AsyncSession, run_id: UUID) -> SimulationRun:
     run = await get_run(session, run_id)
     if run.status is not RunStatus.PAUSED:
         raise RunConflict(f"Run cannot resume from {run.status.value}")
+    from app.realtime.runner import coordinator
+
     run.status = RunStatus.RUNNING
     run.mission.status = MissionStatus.RUNNING
+    lifecycle_event = await _record_lifecycle_event(session, run, EventType.MISSION_RESUMED, coordinator.current_time_ms(run_id))
     await session.commit()
+    await publish_event(redis_client, lifecycle_event)
+    await coordinator.resume(run_id)
     return await get_run(session, run_id)
 
 
@@ -233,8 +275,13 @@ async def stop_run(session: AsyncSession, run_id: UUID) -> SimulationRun:
     run = await get_run(session, run_id)
     if run.status not in {RunStatus.READY, RunStatus.RUNNING, RunStatus.PAUSED}:
         raise RunConflict(f"Run cannot stop from {run.status.value}")
+    from app.realtime.runner import coordinator
+
     run.status = RunStatus.ABORTED
     run.completed_at = datetime.now(timezone.utc)
     run.mission.status = MissionStatus.ABORTED
+    lifecycle_event = await _record_lifecycle_event(session, run, EventType.MISSION_ABORTED, coordinator.current_time_ms(run_id))
     await session.commit()
+    await publish_event(redis_client, lifecycle_event)
+    await coordinator.stop(run_id)
     return await get_run(session, run_id)

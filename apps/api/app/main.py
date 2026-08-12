@@ -1,7 +1,11 @@
 from contextlib import asynccontextmanager
+import logging
+from uuid import uuid4
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from app.api.health import router as health_router
 from app.api.mission_routes import router as mission_router
@@ -18,6 +22,8 @@ from app.db.session import dispose_engine
 from app.realtime.redis import close_redis
 from app.realtime.hub import hub
 from app.realtime.runner import coordinator
+
+logger = logging.getLogger(__name__)
 
 
 @asynccontextmanager
@@ -38,6 +44,48 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.middleware("http")
+async def request_id_middleware(request: Request, call_next):
+    request_id = request.headers.get("x-request-id") or str(uuid4())
+    request.state.request_id = request_id
+    response = await call_next(request)
+    response.headers["x-request-id"] = request_id
+    return response
+
+
+def _error_response(request: Request, status_code: int, code: str, message: str, details: object | None = None) -> JSONResponse:
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "error": {
+                "code": code,
+                "message": message,
+                "request_id": getattr(request.state, "request_id", str(uuid4())),
+                "details": details or {},
+            }
+        },
+    )
+
+
+@app.exception_handler(HTTPException)
+async def http_exception_handler(request: Request, exc: HTTPException) -> JSONResponse:
+    code_by_status = {400: "VALIDATION_ERROR", 404: "NOT_FOUND", 409: "CONFLICT", 429: "LIMIT_EXCEEDED"}
+    message = exc.detail if isinstance(exc.detail, str) else "Request failed"
+    details = exc.detail if isinstance(exc.detail, dict) else {}
+    return _error_response(request, exc.status_code, code_by_status.get(exc.status_code, "REQUEST_ERROR"), message, details)
+
+
+@app.exception_handler(RequestValidationError)
+async def validation_exception_handler(request: Request, exc: RequestValidationError) -> JSONResponse:
+    return _error_response(request, 422, "VALIDATION_ERROR", "Request validation failed", {"fields": exc.errors()})
+
+
+@app.exception_handler(Exception)
+async def unhandled_exception_handler(request: Request, exc: Exception) -> JSONResponse:
+    logger.exception("unhandled API error", extra={"request_id": getattr(request.state, "request_id", None)})
+    return _error_response(request, 500, "INTERNAL_ERROR", "An internal error occurred")
 app.include_router(health_router, prefix="/api/health")
 app.include_router(mission_router, prefix="/api")
 app.include_router(run_router, prefix="/api")

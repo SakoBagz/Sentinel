@@ -1,6 +1,6 @@
 # Sentinel Architecture
 
-Status: Phase 0 design baseline  
+Status: Phase 11 implementation baseline
 Date: 2026-08-12
 
 ## Architectural style
@@ -157,4 +157,3 @@ The proposed `mission_vehicles` association, run-scoped vehicle ID convention,
 durable telemetry event ID, and distinct mission/run status semantics are detailed in
 `PRODUCT_SPEC.md` and `DATABASE.md`. No migration or production implementation should
 begin until those contract points are accepted or revised in these docs.
-

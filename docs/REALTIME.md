@@ -1,6 +1,6 @@
 # Sentinel Realtime Architecture
 
-Status: Phase 0 design baseline  
+Status: Phase 11 implementation baseline
 Date: 2026-08-12
 
 ## Role of Redis/Valkey
@@ -29,16 +29,16 @@ state may disappear, but completed durable mission history must remain available
 
 ## Consumer behavior
 
-Consumers use explicit consumer groups or equivalent ownership and acknowledge records
-only after their responsibility is complete. Each consumer is restart-safe:
+The current MVP uses per-run Redis `XREAD` offsets for the WebSocket broadcaster and a
+separate bounded persistence worker. Each consumer is restart-safe:
 
 - broadcaster reconnects and cleans up dead WebSocket subscriptions;
 - persistence worker batches and retries conflict-safe writes;
 - metrics processor records processing lag and failure counts;
 - no consumer assumes that stream delivery is exactly once.
 
-The precise Redis client and consumer-group naming is an implementation detail that
-must be fixed in Phase 1/4 without changing these logical contracts.
+Consumer groups can be introduced for multi-instance fan-out without changing these
+logical contracts.
 
 ## WebSocket endpoint
 
@@ -135,4 +135,3 @@ duration.
 - Define the reconnect snapshot endpoint/shape.
 - Decide whether WebSocket subscriptions may be changed after initial subscribe.
 - Set maximum per-message and per-batch sizes before Phase 4.
-

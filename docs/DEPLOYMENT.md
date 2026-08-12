@@ -3,7 +3,7 @@
 The supported JavaScript runtime is pinned to Node 22.x in `.nvmrc`, CI, and the
 Dockerfiles. Node 24 is not the supported local runtime for this Next.js baseline.
 
-Status: Phase 9/10 implementation baseline
+Status: Phase 11 implementation baseline
 Date: 2026-08-12
 
 ## Cost constraint
@@ -124,7 +124,7 @@ metrics, and use AI when quota is available. No paid infrastructure is required.
 
 - Provider layouts are documented as portable configuration rather than required
   dependencies; free-tier availability must still be checked at deployment time.
-- `scripts/seed_demo.py` creates the deterministic benign three-UAV scenario through
+- `scripts/seed_demo.py` creates the deterministic benign 25-UAV scenario through
   the API, and `scripts/cleanup_runs.py` is dry-run by default for retention review.
 - The API container runs Alembic before Uvicorn; local Compose and the Render Docker
   service therefore share the same migration-on-start behavior.

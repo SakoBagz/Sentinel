@@ -1,6 +1,6 @@
 # Sentinel Simulation Architecture
 
-Status: Phase 0 design baseline  
+Status: Phase 11 implementation baseline
 Date: 2026-08-12
 
 ## Purpose
@@ -118,6 +118,10 @@ The simulator continues state updates while messages are dropped or delayed. A
 duplicate retains the same sequence and event identity. A delayed message may be
 observed out of order by consumers and must exercise their sequence handling.
 
+Accepted packets that remain in the delivery queue when a run reaches a terminal
+state are flushed without advancing simulation time. Packets suppressed by an active
+blackout or disconnect remain missing, preserving the configured network behavior.
+
 ## Communications state
 
 State thresholds are configuration values. Recent successful delivery and acceptable
@@ -169,4 +173,3 @@ simulation.
 - Define the exact battery consumption units and default coefficients before Phase 3.
 - Define whether `HOLD` has a duration or remains until an external action; MVP should
   use a finite configured hold duration.
-

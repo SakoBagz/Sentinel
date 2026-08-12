@@ -20,7 +20,7 @@ export default function HomePage() {
           </p>
           <div className="actions">
             <Link className="button primary" href="/missions">Open mission control</Link>
-            <Link className="button" href="/missions/demo/plan">View planner</Link>
+            <Link className="button" href="/missions">Browse missions</Link>
           </div>
         </section>
         <section className="grid">

@@ -139,7 +139,9 @@ async def list_vehicles(session: AsyncSession, mission_id: UUID) -> Sequence[Mis
 
 
 async def remove_vehicle(session: AsyncSession, mission_id: UUID, vehicle_id: UUID) -> None:
-    await get_mission(session, mission_id)
+    mission = await get_mission(session, mission_id)
+    if mission.status in {MissionStatus.RUNNING, MissionStatus.PAUSED}:
+        raise MissionConflict("Vehicles cannot be changed during an active run")
     membership = await session.scalar(
         select(MissionVehicle).where(MissionVehicle.id == vehicle_id, MissionVehicle.mission_id == mission_id)
     )
@@ -153,7 +155,9 @@ async def remove_vehicle(session: AsyncSession, mission_id: UUID, vehicle_id: UU
 
 
 async def add_waypoint(session: AsyncSession, mission_id: UUID, payload: WaypointCreate) -> Waypoint:
-    await get_mission(session, mission_id)
+    mission = await get_mission(session, mission_id)
+    if mission.status in {MissionStatus.RUNNING, MissionStatus.PAUSED}:
+        raise MissionConflict("Waypoints cannot be changed during an active run")
     if payload.vehicle_id is not None:
         membership = await session.scalar(
             select(MissionVehicle).where(
@@ -182,6 +186,9 @@ async def update_waypoint(session: AsyncSession, waypoint_id: UUID, payload: Way
     waypoint = await session.get(Waypoint, waypoint_id)
     if waypoint is None:
         raise WaypointNotFound
+    mission = await get_mission(session, waypoint.mission_id)
+    if mission.status in {MissionStatus.RUNNING, MissionStatus.PAUSED}:
+        raise MissionConflict("Waypoints cannot be changed during an active run")
     values = payload.model_dump(exclude_unset=True)
     target_vehicle_id = values.get("vehicle_id", waypoint.vehicle_id)
     target_sequence = values.get("sequence", waypoint.sequence)
@@ -214,5 +221,8 @@ async def delete_waypoint(session: AsyncSession, waypoint_id: UUID) -> None:
     waypoint = await session.get(Waypoint, waypoint_id)
     if waypoint is None:
         raise WaypointNotFound
+    mission = await get_mission(session, waypoint.mission_id)
+    if mission.status in {MissionStatus.RUNNING, MissionStatus.PAUSED}:
+        raise MissionConflict("Waypoints cannot be changed during an active run")
     await session.delete(waypoint)
     await session.commit()

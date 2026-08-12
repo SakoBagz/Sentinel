@@ -1,6 +1,6 @@
 # Sentinel REST API Contract
 
-Status: Phase 0 design baseline  
+Status: Phase 11 implementation baseline
 Date: 2026-08-12
 
 ## Conventions
@@ -80,6 +80,7 @@ identifier.
 |---|---|---|
 | POST | `/api/missions/{mission_id}/runs` | Create an immutable run snapshot |
 | GET | `/api/runs/{run_id}` | Retrieve run status and configuration |
+| GET | `/api/runs/{run_id}/vehicles` | Retrieve run-scoped vehicle identities |
 | POST | `/api/runs/{run_id}/start` | Start simulation |
 | POST | `/api/runs/{run_id}/pause` | Pause simulation |
 | POST | `/api/runs/{run_id}/resume` | Resume simulation |

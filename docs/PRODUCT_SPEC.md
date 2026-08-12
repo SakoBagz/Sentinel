@@ -89,13 +89,11 @@ hardcoded in the UI.
 
 ## Phase boundaries
 
-Phase 0 produces the authoritative contracts in this directory. It contains no
-production feature implementation.
-
-Phase 1 creates the development skeleton and health checks. Later phases add the
-planner, simulator, realtime telemetry, failures, persistence/replay, metrics, AI,
-optimization, and public deployment in that order. A later phase must not be started
-until the preceding phase's acceptance criteria and relevant checks pass.
+The authoritative contracts in this directory are implemented incrementally on the
+phase branches recorded in Git history. The current main branch includes the planner,
+simulator, realtime telemetry, failures, persistence/replay, metrics, AI, runtime
+controls, and deployment hardening; benchmark scale remains an explicit measurement
+activity rather than a claim about the public demo.
 
 ## Acceptance criteria by product milestone
 
@@ -135,9 +133,9 @@ These are contract decisions to confirm before Phase 1 implementation:
    telemetry table omits it. This baseline stores it in `telemetry_samples` in the
    next schema revision while retaining `(run_id, vehicle_id, sequence)` as the
    durable idempotency key.
-5. **Stop semantics.** `POST /runs/{run_id}/stop` is proposed to transition an active
-   run to `ABORTED`; normal completion is simulator-driven. Owner confirmation is
-   required before exposing this as a stable API promise.
+5. **Stop semantics.** `POST /runs/{run_id}/stop` transitions an active run to
+   `ABORTED`; normal completion remains simulator-driven. The coordinator observes the
+   command and stops progression without overwriting the abort with completion.
 6. **Simulation speed.** This baseline treats `simulation_speed` as a multiplier on
    wall-clock scheduling while simulation time remains deterministic. It must not
    alter the tick algorithm or seeded random sequence.

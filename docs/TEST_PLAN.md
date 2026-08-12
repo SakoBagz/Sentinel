@@ -1,6 +1,6 @@
 # Sentinel Test Plan
 
-Status: Phase 0 design baseline  
+Status: Phase 11 implementation baseline
 Date: 2026-08-12
 
 ## Testing principles
@@ -119,4 +119,3 @@ number is published until produced by the benchmark script.
 - Decide whether end-to-end CI runs Docker Compose services on every pull request or
   uses a reduced in-process test profile.
 - Define minimum coverage thresholds after the first baseline suite exists.
-

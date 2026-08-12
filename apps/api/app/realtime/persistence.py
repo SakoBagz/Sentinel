@@ -140,9 +140,15 @@ class PersistenceWorker:
                     break
                 batch.append(item)
             try:
-                await persist_batch(batch)
-            except Exception as exc:
-                self.error = exc
+                for attempt in range(3):
+                    try:
+                        await persist_batch(batch)
+                        break
+                    except Exception as exc:
+                        if attempt == 2:
+                            self.error = exc
+                            break
+                        await asyncio.sleep(0.05 * (2**attempt))
             finally:
                 for _ in batch:
                     self.queue.task_done()

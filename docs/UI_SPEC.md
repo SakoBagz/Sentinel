@@ -1,6 +1,6 @@
 # Sentinel Frontend and UI Specification
 
-Status: Phase 0 design baseline  
+Status: Phase 11 implementation baseline
 Date: 2026-08-12
 
 ## Product feel
@@ -131,4 +131,3 @@ simulation and replay functionality remain operational.”
 - Confirm whether planner route edits are optimistic or save-on-submit only; baseline
   is local edits followed by explicit save.
 - Define the exact API shape for current live vehicle snapshots on WebSocket reconnect.
-

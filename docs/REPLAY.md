@@ -1,6 +1,6 @@
 # Sentinel Replay Architecture
 
-Status: Phase 0 design baseline  
+Status: Phase 11 implementation baseline
 Date: 2026-08-12
 
 ## Principle
@@ -76,4 +76,3 @@ jump to an event. The simulation engine must not be invoked by any replay action
   event-aware.
 - Decide whether replay includes an explicit marker for transient messages that were
   delivered live but not durably stored.
-

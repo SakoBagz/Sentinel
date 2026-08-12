@@ -32,6 +32,9 @@ class _RuntimeVehicle:
     sequence: int = 0
     low_battery_emitted: bool = False
     critical_battery_emitted: bool = False
+    gps_quality_percent: float = 100.0
+    sensor_status: str = "AVAILABLE"
+    hold_until_ms: int = 0
 
 
 class SimulationEngine:
@@ -170,7 +173,11 @@ class SimulationEngine:
         multiplier = 1.0
         for failure in self.network.active_failures(vehicle.config.id, self.clock.sim_time_ms):
             if failure.failure_type is FailureType.BATTERY_ANOMALY:
-                multiplier = max(multiplier, float(failure.configuration.get("drain_multiplier", 2.0)))
+                try:
+                    configured = float(failure.configuration.get("drain_multiplier", 2.0))
+                except (TypeError, ValueError):
+                    configured = 2.0
+                multiplier = max(multiplier, min(20.0, max(0.1, configured)))
         vehicle.battery_percent = max(
             0.0,
             vehicle.battery_percent
@@ -196,6 +203,10 @@ class SimulationEngine:
         elif vehicle.mission_state is VehicleMissionState.LAUNCHING:
             self._transition(vehicle, VehicleMissionState.TRANSIT, EventType.VEHICLE_LAUNCHED)
         elif vehicle.mission_state in {VehicleMissionState.TRANSIT, VehicleMissionState.EXECUTING}:
+            if vehicle.hold_until_ms > self.clock.sim_time_ms:
+                vehicle.ground_speed_mps = 0.0
+                self._update_battery(vehicle)
+                return
             route = self.routes[vehicle.config.id]
             if vehicle.current_waypoint_index >= len(route):
                 self._transition(vehicle, VehicleMissionState.RETURNING, EventType.VEHICLE_RETURNING)
@@ -216,7 +227,13 @@ class SimulationEngine:
                         {"waypoint_id": str(waypoint.id), "sequence": waypoint.sequence},
                     )
                     vehicle.current_waypoint_index += 1
-                    if vehicle.current_waypoint_index >= len(route):
+                    if waypoint.action.value == "RETURN":
+                        vehicle.current_waypoint_index = len(route)
+                        self._transition(vehicle, VehicleMissionState.RETURNING, EventType.VEHICLE_RETURNING)
+                    elif waypoint.action.value == "HOLD":
+                        vehicle.hold_until_ms = self.clock.sim_time_ms + 1_000
+                        vehicle.mission_state = VehicleMissionState.EXECUTING
+                    elif vehicle.current_waypoint_index >= len(route):
                         self._transition(vehicle, VehicleMissionState.RETURNING, EventType.VEHICLE_RETURNING)
                     elif vehicle.mission_state is VehicleMissionState.TRANSIT:
                         vehicle.mission_state = VehicleMissionState.EXECUTING if waypoint.action.value == "SURVEY" else VehicleMissionState.TRANSIT
@@ -246,6 +263,20 @@ class SimulationEngine:
         self._emit_event(vehicle, event_type, severity, {"communications_state": current})
 
     def _emit_telemetry(self, vehicle: _RuntimeVehicle) -> None:
+        active_failures = self.network.active_failures(vehicle.config.id, self.clock.sim_time_ms)
+        gps_quality = 100.0
+        sensor_status = "AVAILABLE"
+        for failure in active_failures:
+            if failure.failure_type is FailureType.GPS_QUALITY_DEGRADATION:
+                try:
+                    configured = float(failure.configuration.get("gps_quality_percent", 25.0))
+                except (TypeError, ValueError):
+                    configured = 25.0
+                gps_quality = min(gps_quality, min(100.0, max(0.0, configured)))
+            elif failure.failure_type is FailureType.SENSOR_UNAVAILABLE:
+                sensor_status = str(failure.configuration.get("sensor", "POSITION"))[:64] or "POSITION"
+        vehicle.gps_quality_percent = gps_quality
+        vehicle.sensor_status = sensor_status
         event_id = deterministic_id(self.run_id, f"telemetry:{vehicle.config.id}", vehicle.sequence)
         envelope = TelemetryEnvelope(
                 mission_id=self.mission.id,
@@ -263,6 +294,8 @@ class SimulationEngine:
                     "battery_percent": vehicle.battery_percent,
                     "mission_state": vehicle.mission_state.value,
                     "communications_state": vehicle.communications_state.value,
+                    "gps_quality_percent": vehicle.gps_quality_percent,
+                    "sensor_status": vehicle.sensor_status,
                 },
             )
         self.generated_telemetry.append(envelope)
@@ -284,12 +317,16 @@ class SimulationEngine:
             self.next_telemetry_ms += self.telemetry_period_ms
         self.telemetry.extend(self.network.drain(self.clock.sim_time_ms))
 
+    def flush_pending(self) -> None:
+        self.telemetry.extend(self.network.flush(self.clock.sim_time_ms))
+
     def is_complete(self) -> bool:
         return all(vehicle.mission_state is VehicleMissionState.COMPLETE for vehicle in self.vehicles.values())
 
     def run(self) -> SimulationResult:
         while not self.is_complete() and self.clock.sim_time_ms < self.mission.duration_limit_ms:
             self.tick()
+        self.flush_pending()
         snapshots = tuple(
             VehicleSnapshot(
                 vehicle_id=vehicle.config.id,

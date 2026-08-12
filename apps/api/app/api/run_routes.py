@@ -61,6 +61,25 @@ async def get_run(run_id: UUID, session: AsyncSession = Depends(get_db_session))
         raise HTTPException(status_code=404, detail="Run not found") from exc
 
 
+@router.get("/runs/{run_id}/vehicles", response_model=list[RunVehicleRead])
+async def get_run_vehicles(run_id: UUID, session: AsyncSession = Depends(get_db_session)) -> list[RunVehicleRead]:
+    try:
+        run = await run_service.get_run(session, run_id)
+        return [
+            RunVehicleRead(
+                id=item.id,
+                vehicle_definition_id=item.vehicle_definition_id,
+                callsign=item.vehicle_definition.callsign,
+                starting_latitude=item.starting_latitude,
+                starting_longitude=item.starting_longitude,
+                starting_altitude_m=item.starting_altitude_m,
+            )
+            for item in run.run_vehicles
+        ]
+    except run_service.RunNotFound as exc:
+        raise HTTPException(status_code=404, detail="Run not found") from exc
+
+
 async def _command(run_id: UUID, action, session: AsyncSession) -> RunRead:
     try:
         return to_run_read(await action(session, run_id))

@@ -77,7 +77,12 @@ async function request<T>(path: string, init?: RequestInit, schema?: z.ZodType<T
   });
   if (!response.ok) {
     const body = await response.text();
-    throw new Error(body || `Request failed with ${response.status}`);
+    let message = body || `Request failed with ${response.status}`;
+    try {
+      const parsed = JSON.parse(body) as { error?: { message?: string } };
+      message = parsed.error?.message ?? message;
+    } catch { /* keep the raw response for non-JSON errors */ }
+    throw new Error(message);
   }
   if (response.status === 204) return undefined as T;
   const value: unknown = await response.json();
@@ -109,6 +114,14 @@ export async function addWaypoint(id: string, input: Record<string, unknown>): P
   return request(`/api/missions/${id}/waypoints`, { method: "POST", body: JSON.stringify(input) }, waypointSchema);
 }
 
+export async function updateWaypoint(id: string, input: Record<string, unknown>): Promise<Waypoint> {
+  return request(`/api/waypoints/${id}`, { method: "PATCH", body: JSON.stringify(input) }, waypointSchema);
+}
+
+export async function deleteWaypoint(id: string): Promise<void> {
+  return request(`/api/waypoints/${id}`, { method: "DELETE" });
+}
+
 export async function createRun(id: string, input: { random_seed?: number; simulation_speed?: number; duration_limit_minutes?: number } = {}): Promise<Run> {
   return request(`/api/missions/${id}/runs`, { method: "POST", body: JSON.stringify(input) }, runSchema);
 }
@@ -119,6 +132,18 @@ export async function getRun(id: string): Promise<Run> {
 
 export async function startRun(id: string): Promise<Run> {
   return request(`/api/runs/${id}/start`, { method: "POST" }, runSchema);
+}
+
+export async function pauseRun(id: string): Promise<Run> {
+  return request(`/api/runs/${id}/pause`, { method: "POST" }, runSchema);
+}
+
+export async function resumeRun(id: string): Promise<Run> {
+  return request(`/api/runs/${id}/resume`, { method: "POST" }, runSchema);
+}
+
+export async function stopRun(id: string): Promise<Run> {
+  return request(`/api/runs/${id}/stop`, { method: "POST" }, runSchema);
 }
 
 export const failureTypes = ["COMMUNICATIONS_BLACKOUT", "HIGH_LATENCY", "PACKET_LOSS", "GPS_QUALITY_DEGRADATION", "BATTERY_ANOMALY", "SENSOR_UNAVAILABLE", "SERVICE_DELAY"] as const;

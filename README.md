@@ -7,12 +7,12 @@ read-only AI mission analysis.
 
 ## Current implementation status
 
-The repository is being implemented phase-by-phase from the master specification.
-The authoritative design contracts are in [`docs/`](docs/), and engineering rules are
-in [`AGENTS.md`](AGENTS.md). Mission planning, deterministic simulation, realtime
-delivery, failure injection, durable replay, metrics, and local benchmark harnesses
-are implemented, as is the provider-neutral read-only Mission Analyst with mock and
-optional Gemini adapters; deployment hardening follows.
+The repository is implemented phase-by-phase from the master specification. The
+authoritative design contracts are in [`docs/`](docs/), and engineering rules are in
+[`AGENTS.md`](AGENTS.md). Mission planning, deterministic simulation, reconnectable
+realtime delivery, failure injection, durable replay with interpolation, runtime
+controls, metrics, and local benchmark harnesses are implemented, as is the
+provider-neutral read-only Mission Analyst with mock and optional Gemini adapters.
 
 ## Local development
 

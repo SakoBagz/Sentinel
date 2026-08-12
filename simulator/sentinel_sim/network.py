@@ -1,4 +1,5 @@
 import heapq
+import math
 from dataclasses import dataclass, field
 from typing import Any
 from uuid import UUID
@@ -20,11 +21,13 @@ class NetworkConfiguration:
     disconnect_duration_max_ms: int = 3000
 
     def __post_init__(self) -> None:
+        if not math.isfinite(self.base_latency_ms) or not math.isfinite(self.jitter_ms):
+            raise ValueError("latency and jitter must be finite")
         if self.base_latency_ms < 0 or self.jitter_ms < 0:
             raise ValueError("latency and jitter cannot be negative")
         for name in ("packet_loss_percent", "duplicate_percent", "disconnect_probability"):
             value = getattr(self, name)
-            if not 0 <= value <= 100:
+            if not math.isfinite(value) or not 0 <= value <= 100:
                 raise ValueError(f"{name} must be between 0 and 100")
         if self.disconnect_duration_min_ms <= 0 or self.disconnect_duration_max_ms < self.disconnect_duration_min_ms:
             raise ValueError("disconnect duration bounds are invalid")
@@ -106,10 +109,12 @@ class NetworkSimulator:
             if window.failure_type is FailureType.COMMUNICATIONS_BLACKOUT:
                 blackout = True
             elif window.failure_type is FailureType.HIGH_LATENCY:
-                latency += float(window.configuration.get("latency_ms", 300.0))
-                jitter += float(window.configuration.get("jitter_ms", 50.0))
+                latency += self._bounded_number(window.configuration, "latency_ms", 300.0, 0.0, 60_000.0)
+                jitter += self._bounded_number(window.configuration, "jitter_ms", 50.0, 0.0, 60_000.0)
             elif window.failure_type is FailureType.PACKET_LOSS:
-                loss = max(loss, min(100.0, float(window.configuration.get("packet_loss_percent", 25.0))))
+                loss = max(loss, self._bounded_number(window.configuration, "packet_loss_percent", 25.0, 0.0, 100.0))
+            elif window.failure_type is FailureType.SERVICE_DELAY:
+                latency += self._bounded_number(window.configuration, "delay_ms", 500.0, 0.0, 60_000.0)
         return NetworkConfiguration(
             base_latency_ms=latency,
             jitter_ms=jitter,
@@ -119,6 +124,16 @@ class NetworkSimulator:
             disconnect_duration_min_ms=state.profile.disconnect_duration_min_ms,
             disconnect_duration_max_ms=state.profile.disconnect_duration_max_ms,
         ), blackout, bool(active)
+
+    @staticmethod
+    def _bounded_number(configuration: dict[str, Any], key: str, default: float, lower: float, upper: float) -> float:
+        try:
+            value = float(configuration.get(key, default))
+        except (TypeError, ValueError):
+            return default
+        if not math.isfinite(value):
+            return default
+        return min(upper, max(lower, value))
 
     def advance(self, vehicle_id: UUID, sim_time_ms: int, dt_ms: int) -> str:
         state = self._state(vehicle_id)
@@ -172,8 +187,32 @@ class NetworkSimulator:
                 state.last_delivery_ms = sim_time_ms
                 if state.recovery_ticks > 0:
                     state.recovery_ticks -= 1
-        delivered.sort(key=lambda item: (item.sim_time_ms, item.vehicle_id.hex, item.sequence))
         return delivered
+
+    def flush(self, sim_time_ms: int) -> list[TelemetryEnvelope]:
+        """Deliver queued packets at run shutdown without advancing simulation time.
+
+        Latency is a delivery concern, so a completed run should not silently lose
+        packets that were already accepted by the network. Active blackouts and
+        automatic disconnects still suppress delivery because those packets were
+        never available to the ground consumer.
+        """
+        delivered: list[TelemetryEnvelope] = []
+        for state in self.vehicles.values():
+            blackout_active = any(
+                window.failure_type is FailureType.COMMUNICATIONS_BLACKOUT and window.active(sim_time_ms)
+                for window in state.failures
+            )
+            if blackout_active or state.automatic_disconnect_active:
+                continue
+            while state.pending:
+                _, _, envelope = heapq.heappop(state.pending)
+                delivered.append(envelope)
+                state.last_delivery_ms = sim_time_ms
+        return delivered
+
+    def pending_count(self) -> int:
+        return sum(len(state.pending) for state in self.vehicles.values())
 
     def state(self, vehicle_id: UUID) -> str:
         return self._state(vehicle_id).state

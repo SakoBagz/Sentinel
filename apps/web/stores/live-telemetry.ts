@@ -13,6 +13,8 @@ export type VehicleTelemetry = {
   headingDeg: number;
   groundSpeedMps: number;
   batteryPercent: number;
+  gpsQualityPercent: number;
+  sensorStatus: string;
   missionState: MissionState;
   communicationsState: CommunicationsState;
 };
@@ -68,4 +70,3 @@ export const useLiveTelemetry = create<LiveTelemetryState>((set) => ({
   ingestEvent: (event) => set((state) => ({ events: [event, ...state.events].slice(0, 200) })),
   reset: () => set(initialState),
 }));
-

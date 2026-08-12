@@ -84,6 +84,7 @@ button { font: inherit; }
 .replay-vehicles { display: grid; gap: 8px; margin-top: 18px; }
 .replay-vehicle { display: flex; justify-content: space-between; gap: 12px; padding: 10px; border: 1px solid var(--line); border-radius: 6px; background: rgba(8,16,25,.55); font-size: 12px; }
 .replay-vehicle span { color: var(--muted); }
+.sentinel-marker-heading { display: block; color: #06130f; font-size: 13px; line-height: 1; transform-origin: center; text-shadow: 0 0 2px rgba(255,255,255,.8); }
 .replay-lower { margin-top: 14px; }
 .debrief-sequence { margin-top: 14px; max-width: 460px; }
 .analyst-panel { margin-top: 14px; }

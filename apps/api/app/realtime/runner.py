@@ -5,14 +5,15 @@ from datetime import datetime, timezone
 from time import perf_counter
 from uuid import UUID
 
-from app.domain.enums import FailureType
+from app.domain.enums import EventSeverity, EventType, FailureType, MissionStatus, RunStatus
+from app.db.models.entities import MissionEvent
 from app.db.session import SessionFactory
 from app.realtime.redis import redis_client
 from app.realtime.persistence import PersistenceWorker
 from app.realtime.streams import publish_event, publish_telemetry
 from app.observability.metrics import metrics
 from app.services.run_service import _mission_to_simulation, get_run, network_profiles_for_run
-from app.domain.enums import MissionStatus, RunStatus
+from sentinel_sim.models import SimulationEvent, deterministic_id
 from sentinel_sim.engine import SimulationEngine
 
 logger = logging.getLogger(__name__)
@@ -23,11 +24,18 @@ class SimulationCoordinator:
         self._tasks: dict[UUID, asyncio.Task[None]] = {}
         self._engines: dict[UUID, SimulationEngine] = {}
         self._pending_failures: dict[UUID, list[tuple[UUID, UUID, FailureType, int, dict]]] = {}
+        self._wake_events: dict[UUID, asyncio.Event] = {}
+        self._paused: set[UUID] = set()
+        self._stop_requested: set[UUID] = set()
 
     async def start(self, run_id: UUID) -> None:
         task = self._tasks.get(run_id)
         if task is not None and not task.done():
             return
+        self._paused.discard(run_id)
+        self._stop_requested.discard(run_id)
+        wake = self._wake_events.setdefault(run_id, asyncio.Event())
+        wake.set()
         self._tasks[run_id] = asyncio.create_task(self._execute(run_id), name=f"sentinel-run-{run_id}")
 
     async def wait(self, run_id: UUID) -> None:
@@ -38,6 +46,23 @@ class SimulationCoordinator:
     def is_active(self, run_id: UUID) -> bool:
         task = self._tasks.get(run_id)
         return task is not None and not task.done()
+
+    async def pause(self, run_id: UUID) -> None:
+        if not self.is_active(run_id):
+            return
+        self._paused.add(run_id)
+        self._wake_events.setdefault(run_id, asyncio.Event()).set()
+
+    async def resume(self, run_id: UUID) -> None:
+        self._paused.discard(run_id)
+        self._wake_events.setdefault(run_id, asyncio.Event()).set()
+
+    async def stop(self, run_id: UUID) -> None:
+        if not self.is_active(run_id):
+            return
+        self._stop_requested.add(run_id)
+        self._paused.discard(run_id)
+        self._wake_events.setdefault(run_id, asyncio.Event()).set()
 
     def current_time_ms(self, run_id: UUID) -> int:
         engine = self._engines.get(run_id)
@@ -84,6 +109,14 @@ class SimulationCoordinator:
                 await persistence.start()
                 try:
                     while not simulation.is_complete() and simulation.clock.sim_time_ms < simulation.mission.duration_limit_ms:
+                        if run_id in self._stop_requested:
+                            break
+                        wake = self._wake_events.setdefault(run_id, asyncio.Event())
+                        while run_id in self._paused and run_id not in self._stop_requested:
+                            wake.clear()
+                            await wake.wait()
+                        if run_id in self._stop_requested:
+                            break
                         tick_started = perf_counter()
                         simulation.tick()
                         metrics.observe("simulation_tick_duration_ms", (perf_counter() - tick_started) * 1000)
@@ -108,7 +141,32 @@ class SimulationCoordinator:
                                 metrics.increment("realtime_publish_errors_total")
                             await persistence.enqueue(event)
                         sent_events = len(simulation.events)
-                        await asyncio.sleep(simulation.clock.tick_interval_ms / 1000 / max(run.simulation_speed, 0.01))
+                        wake.clear()
+                        try:
+                            await asyncio.wait_for(
+                                wake.wait(),
+                                timeout=simulation.clock.tick_interval_ms / 1000 / max(run.simulation_speed, 0.01),
+                            )
+                        except asyncio.TimeoutError:
+                            pass
+                    simulation.flush_pending()
+                    delivered_batch = simulation.telemetry[delivered_cursor:]
+                    metrics.increment("telemetry_messages_received_total", len(delivered_batch))
+                    for envelope in delivered_batch:
+                        publish_started = perf_counter()
+                        record_id = await publish_telemetry(redis_client, envelope)
+                        metrics.observe("telemetry_end_to_end_latency_ms", (perf_counter() - publish_started) * 1000)
+                        if record_id is None:
+                            metrics.increment("realtime_publish_errors_total")
+                        await persistence.enqueue(envelope)
+                    delivered_cursor = len(simulation.telemetry)
+                    for event in simulation.events[sent_events:]:
+                        publish_started = perf_counter()
+                        record_id = await publish_event(redis_client, event)
+                        metrics.observe("event_processing_latency_ms", (perf_counter() - publish_started) * 1000)
+                        if record_id is None:
+                            metrics.increment("realtime_publish_errors_total")
+                        await persistence.enqueue(event)
                 finally:
                     await persistence.stop()
                 generated_by_vehicle: dict[UUID, set[int]] = defaultdict(set)
@@ -133,10 +191,38 @@ class SimulationCoordinator:
                 metrics.increment("telemetry_messages_missing_total", missing)
                 metrics.increment("telemetry_messages_duplicate_total", duplicates)
                 metrics.increment("telemetry_messages_out_of_order_total", out_of_order)
-                run.status = RunStatus.COMPLETED if simulation.is_complete() else RunStatus.ABORTED
+                stop_requested = run_id in self._stop_requested or run.status is RunStatus.ABORTED
+                run.status = RunStatus.ABORTED if stop_requested else RunStatus.COMPLETED if simulation.is_complete() else RunStatus.ABORTED
                 run.completed_at = datetime.now(timezone.utc)
-                run.mission.status = MissionStatus.COMPLETED if simulation.is_complete() else MissionStatus.ABORTED
+                run.mission.status = MissionStatus.ABORTED if stop_requested else MissionStatus.COMPLETED if simulation.is_complete() else MissionStatus.ABORTED
+                lifecycle_event: SimulationEvent | None = None
+                if not stop_requested:
+                    lifecycle_type = EventType.MISSION_COMPLETED if simulation.is_complete() else EventType.MISSION_ABORTED
+                    lifecycle_event = SimulationEvent(
+                        mission_id=run.mission_id,
+                        run_id=run.id,
+                        event_type=lifecycle_type,
+                        severity=EventSeverity.INFO,
+                        sim_time_ms=simulation.clock.sim_time_ms,
+                        payload={"run_status": run.status.value},
+                        event_id=deterministic_id(run.id, lifecycle_type.value, 0),
+                    )
+                    session.add(
+                        MissionEvent(
+                            id=lifecycle_event.event_id,
+                            run_id=lifecycle_event.run_id,
+                            vehicle_id=None,
+                            event_type=lifecycle_event.event_type,
+                            severity=lifecycle_event.severity,
+                            schema_version=lifecycle_event.schema_version,
+                            sim_time_ms=lifecycle_event.sim_time_ms,
+                            timestamp=lifecycle_event.timestamp,
+                            payload=lifecycle_event.payload,
+                        )
+                    )
                 await session.commit()
+                if lifecycle_event is not None:
+                    await publish_event(redis_client, lifecycle_event)
                 logger.info("simulation run completed", extra={"run_id": str(run_id), "sim_time_ms": simulation.clock.sim_time_ms})
         except asyncio.CancelledError:
             raise
@@ -155,10 +241,16 @@ class SimulationCoordinator:
         finally:
             self._engines.pop(run_id, None)
             self._pending_failures.pop(run_id, None)
+            self._wake_events.pop(run_id, None)
+            self._paused.discard(run_id)
+            self._stop_requested.discard(run_id)
             self._tasks.pop(run_id, None)
 
     async def stop_all(self) -> None:
         tasks = list(self._tasks.values())
+        self._stop_requested.update(self._tasks)
+        for wake in self._wake_events.values():
+            wake.set()
         self._tasks.clear()
         for task in tasks:
             task.cancel()

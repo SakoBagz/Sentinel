@@ -2,7 +2,7 @@ from datetime import datetime
 from typing import Any, Literal
 from uuid import UUID
 
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from app.domain.enums import FailureType, MissionStatus, RunStatus, WaypointAction
 
@@ -144,6 +144,27 @@ class FailureCreate(APIModel):
     failure_type: FailureType
     duration_ms: int = Field(default=10_000, ge=100, le=15 * 60 * 1000)
     configuration: dict[str, Any] = Field(default_factory=dict)
+
+    @model_validator(mode="after")
+    def validate_safe_configuration(self) -> "FailureCreate":
+        limits = {
+            "latency_ms": (0.0, 60_000.0),
+            "jitter_ms": (0.0, 60_000.0),
+            "delay_ms": (0.0, 60_000.0),
+            "packet_loss_percent": (0.0, 100.0),
+            "gps_quality_percent": (0.0, 100.0),
+            "drain_multiplier": (0.1, 20.0),
+        }
+        for key, (lower, upper) in limits.items():
+            if key not in self.configuration:
+                continue
+            value = self.configuration[key]
+            if isinstance(value, bool) or not isinstance(value, (int, float)) or not lower <= float(value) <= upper:
+                raise ValueError(f"configuration.{key} must be between {lower:g} and {upper:g}")
+        sensor = self.configuration.get("sensor")
+        if sensor is not None and (not isinstance(sensor, str) or not sensor.strip() or len(sensor) > 64):
+            raise ValueError("configuration.sensor must be a non-empty string of at most 64 characters")
+        return self
 
 
 class FailureRead(APIModel):

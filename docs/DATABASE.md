@@ -1,6 +1,6 @@
 # Sentinel Database Design
 
-Status: Phase 0 design baseline  
+Status: Phase 11 implementation baseline
 Date: 2026-08-12
 
 ## Persistence policy

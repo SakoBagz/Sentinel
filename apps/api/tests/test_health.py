@@ -42,3 +42,11 @@ def test_health_reports_degraded_dependency(monkeypatch) -> None:
     assert response.json()["status"] == "degraded"
     assert response.json()["dependencies"]["redis"] == "unavailable"
 
+
+def test_validation_errors_use_stable_envelope() -> None:
+    with TestClient(app) as client:
+        response = client.get("/api/missions/not-a-uuid")
+
+    assert response.status_code == 422
+    assert response.headers["x-request-id"]
+    assert response.json()["error"]["code"] == "VALIDATION_ERROR"
