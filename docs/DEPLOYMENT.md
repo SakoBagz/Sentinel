@@ -1,6 +1,6 @@
 # Sentinel Deployment Strategy
 
-Status: Phase 0 design baseline  
+Status: Phase 9/10 implementation baseline
 Date: 2026-08-12
 
 ## Cost constraint
@@ -72,9 +72,10 @@ With `PUBLIC_DEMO=true`, enforce 50 vehicles, 15-minute maximum mission duration
 5 runs per session, 10 AI questions per run, and 5 Hz maximum telemetry. These limits
 apply in the backend even if a client is modified.
 
-Anonymous access is intentional for recruiter usability. A rate-limiting/session
-identity design remains a Phase 0 open question and must be settled before public
-deployment; frontend-only counters are insufficient.
+Anonymous access is intentional for recruiter usability. The backend derives a bounded
+session key from `X-Session-Id` or the forwarded client address and enforces the run
+quota server-side. This is a lightweight demo guard, not an authentication system; a
+production deployment should place a trusted proxy/session layer in front of it.
 
 ## Cold starts and dependency degradation
 
@@ -116,10 +117,11 @@ From an anonymous browser, a user can open Sentinel, launch the seeded demo, see
 vehicles and telemetry, inject an allowed failure, complete a run, open replay, view
 metrics, and use AI when quota is available. No paid infrastructure is required.
 
-## Phase 0 questions
+## Implementation status
 
-- Confirm current free-tier provider availability at deployment time without coupling
-  the domain to any provider.
-- Define anonymous session/rate-limiting storage.
-- Decide whether a public demo may run the simulator in the backend web service or
-  requires a separate bounded worker process.
+- Provider layouts are documented as portable configuration rather than required
+  dependencies; free-tier availability must still be checked at deployment time.
+- `scripts/seed_demo.py` creates the deterministic benign three-UAV scenario through
+  the API, and `scripts/cleanup_runs.py` is dry-run by default for retention review.
+- The API container runs Alembic before Uvicorn; local Compose and the Render Docker
+  service therefore share the same migration-on-start behavior.

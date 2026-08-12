@@ -9,6 +9,7 @@ from sqlalchemy.sql import Select
 from app.api.schemas import MissionCreate, MissionUpdate, VehicleCreate, WaypointCreate, WaypointUpdate
 from app.db.models.entities import Mission, MissionVehicle, VehicleDefinition, Waypoint
 from app.domain.enums import MissionStatus
+from app.services.public_limits import ensure_vehicle_allowed
 
 
 class MissionNotFound(Exception):
@@ -81,6 +82,10 @@ async def add_vehicle(session: AsyncSession, mission_id: UUID, payload: VehicleC
     mission = await get_mission(session, mission_id)
     if mission.status in {MissionStatus.RUNNING, MissionStatus.PAUSED}:
         raise MissionConflict("Vehicles cannot be changed during an active run")
+    try:
+        await ensure_vehicle_allowed(session, mission_id, payload.telemetry_rate_hz)
+    except ValueError as exc:
+        raise MissionConflict(str(exc)) from exc
     duplicate = await session.scalar(select(VehicleDefinition).where(VehicleDefinition.callsign == payload.callsign))
     if duplicate is not None:
         existing = await session.scalar(

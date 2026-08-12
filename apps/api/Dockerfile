@@ -7,7 +7,8 @@ COPY apps/api/app ./app
 COPY simulator ./simulator
 COPY apps/api/alembic.ini ./alembic.ini
 COPY apps/api/alembic ./alembic
+COPY apps/api/entrypoint.sh ./entrypoint.sh
 
 ENV PYTHONPATH=/app:/app/simulator
 EXPOSE 8000
-CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "/app/entrypoint.sh"]

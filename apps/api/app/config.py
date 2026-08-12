@@ -9,6 +9,7 @@ class Settings(BaseSettings):
     app_name: str = "Sentinel API"
     api_host: str = "0.0.0.0"
     api_port: int = 8000
+    web_origin: str = "http://localhost:3000"
     database_url: str = "postgresql+asyncpg://sentinel:sentinel@localhost:55432/sentinel"
     redis_url: str = "redis://localhost:6379/0"
     public_demo: bool = False
@@ -33,6 +34,10 @@ class Settings(BaseSettings):
     @property
     def effective_max_vehicles(self) -> int:
         return min(self.sim_max_vehicles, 50) if self.public_demo else self.sim_max_vehicles
+
+    @property
+    def effective_max_telemetry_rate_hz(self) -> float:
+        return 5.0 if self.public_demo else self.default_telemetry_rate_hz
 
 
 @lru_cache(maxsize=1)

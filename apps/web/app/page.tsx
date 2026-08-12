@@ -25,7 +25,7 @@ export default function HomePage() {
         </section>
         <section className="grid">
           <HealthCard />
-          <div className="card"><div className="eyebrow">Mode</div><h2 style={{ marginTop: 14 }}>Development skeleton</h2><p>Phase 1 services are wired for PostgreSQL, Redis/Valkey, FastAPI, and Next.js.</p></div>
+          <div className="card"><div className="eyebrow">Mode</div><h2 style={{ marginTop: 14 }}>Operational baseline</h2><p>Planner, deterministic simulation, realtime telemetry, replay, metrics, and read-only analysis are wired for local and demo environments.</p></div>
           <div className="card"><div className="eyebrow">Safety boundary</div><h2 style={{ marginTop: 14 }}>Read-only analysis</h2><p>The Mission Analyst explains simulated operations; it cannot control vehicles or modify mission state.</p></div>
         </section>
         <div className="notice">Public Portfolio Demo Mode will intentionally limit cloud simulation capacity. Benchmark results are measured locally and disclosed with hardware details.</div>
@@ -33,4 +33,3 @@ export default function HomePage() {
     </>
   );
 }
-

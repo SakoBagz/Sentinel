@@ -1,0 +1,22 @@
+services:
+  - type: web
+    name: sentinel-api
+    runtime: docker
+    dockerfilePath: ./apps/api/Dockerfile
+    dockerContext: .
+    healthCheckPath: /api/health
+    envVars:
+      - key: APP_ENV
+        value: production
+      - key: PUBLIC_DEMO
+        value: "true"
+      - key: WEB_ORIGIN
+        sync: false
+      - key: AI_PROVIDER
+        value: mock
+      - key: DATABASE_URL
+        sync: false
+      - key: REDIS_URL
+        sync: false
+      - key: GEMINI_API_KEY
+        sync: false

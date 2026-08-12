@@ -114,6 +114,7 @@ class MissionList(APIModel):
 class RunCreate(APIModel):
     random_seed: int | None = None
     simulation_speed: float = Field(default=1.0, gt=0)
+    duration_limit_minutes: int | None = Field(default=None, ge=1, le=24 * 60)
 
 
 class RunVehicleRead(APIModel):

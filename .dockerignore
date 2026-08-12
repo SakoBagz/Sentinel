@@ -1,0 +1,16 @@
+.git
+.venv
+node_modules
+**/node_modules
+.next
+**/.next
+__pycache__
+**/__pycache__
+*.py[cod]
+.pytest_cache
+.mypy_cache
+.ruff_cache
+*.tsbuildinfo
+benchmark-results/*.json
+benchmark-results/*.md
+.DS_Store

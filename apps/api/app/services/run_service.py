@@ -2,6 +2,7 @@ import secrets
 from datetime import datetime, timezone
 from uuid import UUID
 
+from app.config import get_settings
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -17,6 +18,7 @@ from app.db.models.entities import (
 )
 from app.domain.enums import MissionStatus, RunStatus
 from app.services import mission_service
+from app.services.public_limits import ensure_run_allowed
 from sentinel_sim.engine import SimulationEngine
 from sentinel_sim.models import MissionConfiguration, VehicleConfiguration, WaypointConfiguration
 from sentinel_sim.navigation import Position
@@ -149,10 +151,18 @@ async def get_run(session: AsyncSession, run_id: UUID) -> SimulationRun:
     return run
 
 
-async def create_run(session: AsyncSession, mission_id: UUID, payload: RunCreate) -> SimulationRun:
+async def create_run(session: AsyncSession, mission_id: UUID, payload: RunCreate, session_id: str = "anonymous") -> SimulationRun:
     mission = await mission_service.get_mission(session, mission_id)
     if not mission.vehicle_memberships:
         raise RunConflict("A mission must have at least one vehicle before it can run")
+    try:
+        await ensure_run_allowed(session, mission, session_id)
+    except ValueError as exc:
+        raise RunConflict(str(exc)) from exc
+    settings = get_settings()
+    duration_minutes = payload.duration_limit_minutes or settings.max_mission_duration_minutes
+    if duration_minutes > settings.max_mission_duration_minutes:
+        raise RunConflict(f"Mission duration cannot exceed {settings.max_mission_duration_minutes} minutes")
     seed = payload.random_seed if payload.random_seed is not None else secrets.randbelow(2**63 - 1)
     run = SimulationRun(
         mission_id=mission.id,
@@ -161,7 +171,8 @@ async def create_run(session: AsyncSession, mission_id: UUID, payload: RunCreate
         simulation_speed=payload.simulation_speed,
         configuration={
             "mission_status_at_creation": mission.status.value,
-            "duration_limit_ms": 15 * 60 * 1000,
+            "duration_limit_ms": duration_minutes * 60 * 1000,
+            "session_key": session_id,
         },
     )
     session.add(run)

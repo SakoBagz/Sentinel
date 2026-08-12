@@ -109,7 +109,7 @@ export async function addWaypoint(id: string, input: Record<string, unknown>): P
   return request(`/api/missions/${id}/waypoints`, { method: "POST", body: JSON.stringify(input) }, waypointSchema);
 }
 
-export async function createRun(id: string, input: { random_seed?: number; simulation_speed?: number } = {}): Promise<Run> {
+export async function createRun(id: string, input: { random_seed?: number; simulation_speed?: number; duration_limit_minutes?: number } = {}): Promise<Run> {
   return request(`/api/missions/${id}/runs`, { method: "POST", body: JSON.stringify(input) }, runSchema);
 }
 

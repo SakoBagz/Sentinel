@@ -33,9 +33,16 @@ services:
       dockerfile: apps/api/Dockerfile
     environment:
       APP_ENV: development
+      WEB_ORIGIN: http://localhost:3000
       DATABASE_URL: postgresql+asyncpg://sentinel:sentinel@postgres:5432/sentinel
       REDIS_URL: redis://redis:6379/0
       PUBLIC_DEMO: "false"
+      SIM_MAX_VEHICLES: 1000
+      DEFAULT_TELEMETRY_RATE_HZ: 10
+      MAX_MISSION_DURATION_MINUTES: 15
+      MAX_RUNS_PER_SESSION: 5
+      MAX_AI_QUESTIONS_PER_RUN: 10
+      AI_PROVIDER: mock
     ports:
       - "8000:8000"
     depends_on:

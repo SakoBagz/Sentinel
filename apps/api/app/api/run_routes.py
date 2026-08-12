@@ -1,12 +1,13 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, Header, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import RunCreate, RunRead, RunVehicleRead
 from app.db.models.entities import SimulationRun
 from app.db.session import get_db_session
 from app.services import mission_service, run_service
+from app.services.public_limits import session_key
 
 router = APIRouter(tags=["runs"])
 
@@ -37,9 +38,15 @@ def to_run_read(run: SimulationRun) -> RunRead:
 
 
 @router.post("/missions/{mission_id}/runs", response_model=RunRead, status_code=201)
-async def create_run(mission_id: UUID, payload: RunCreate, session: AsyncSession = Depends(get_db_session)) -> RunRead:
+async def create_run(
+    mission_id: UUID,
+    payload: RunCreate,
+    session: AsyncSession = Depends(get_db_session),
+    x_session_id: str | None = Header(default=None),
+    x_forwarded_for: str | None = Header(default=None),
+) -> RunRead:
     try:
-        return to_run_read(await run_service.create_run(session, mission_id, payload))
+        return to_run_read(await run_service.create_run(session, mission_id, payload, session_key(x_session_id, x_forwarded_for)))
     except mission_service.MissionNotFound as exc:
         raise HTTPException(status_code=404, detail="Mission not found") from exc
     except run_service.RunConflict as exc:
@@ -81,4 +88,3 @@ async def resume_run(run_id: UUID, session: AsyncSession = Depends(get_db_sessio
 @router.post("/runs/{run_id}/stop", response_model=RunRead)
 async def stop_run(run_id: UUID, session: AsyncSession = Depends(get_db_session)) -> RunRead:
     return await _command(run_id, run_service.stop_run, session)
-
