@@ -1,0 +1,5 @@
+export default async function PlannerPage({ params }: { params: Promise<{ id: string }> }) {
+  const { id } = await params;
+  return <main className="main"><div className="eyebrow">Mission planner / {id}</div><h1>Planner surface</h1><div className="workspace"><aside className="rail"><div className="eyebrow">UAV fleet</div><div className="list"><div className="list-item"><strong>UAV-001</strong><span>Ready · HEALTHY</span></div><div className="list-item"><strong>UAV-002</strong><span>Ready · HEALTHY</span></div><div className="list-item"><strong>UAV-003</strong><span>Ready · HEALTHY</span></div></div></aside><section className="map"><span>MapLibre mission map — planner integration follows the Phase 2 API.</span></section><aside className="inspector"><div className="eyebrow">Mission config</div><div className="metric"><span>Scenario</span><strong>Survey</strong></div><div className="metric"><span>Return battery</span><strong>25%</strong></div><div className="metric"><span>Network profile</span><strong>Baseline</strong></div></aside></div></main>;
+}
+
