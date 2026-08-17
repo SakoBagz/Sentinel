@@ -56,6 +56,7 @@ button { font: inherit; }
 .map-shell { position: relative; min-height: 680px; }
 .map-shell > .map-canvas { position: absolute; inset: 0; width: 100%; height: 100%; }
 .map-hint { position: absolute; left: 16px; bottom: 16px; z-index: 2; padding: 8px 10px; border: 1px solid var(--line); border-radius: 6px; background: rgba(8, 16, 25, .86); color: var(--muted); font-size: 12px; }
+.map-hint.error { border-color: var(--critical); color: #f0bcbc; }
 .list { display: grid; gap: 10px; margin-top: 18px; }
 .list-item { padding: 12px; border: 1px solid var(--line); border-radius: 8px; background: var(--panel); text-align: left; color: var(--ink); }
 .list-item.selectable { width: 100%; cursor: pointer; }

@@ -219,7 +219,7 @@ export function LiveOperations({ runId }: { runId: string }) {
           if (telemetry) ingestTelemetry(telemetry);
           if (!telemetry && envelope.data.type !== "vehicle.telemetry") {
             ingestEvent({ eventId: envelope.data.event_id, type: envelope.data.type, severity: envelope.data.severity ?? "INFO", vehicleId: envelope.data.vehicle_id ?? null, simTimeMs: envelope.data.sim_time_ms, payload: envelope.data.payload });
-            if (envelope.data.type === "mission.completed" || envelope.data.type === "mission.aborted") {
+            if (["mission.started", "mission.paused", "mission.resumed", "mission.completed", "mission.aborted"].includes(envelope.data.type)) {
               getRun(runId).then(setRun).catch(() => { /* telemetry remains visible if status refresh fails */ });
             }
           }

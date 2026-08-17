@@ -51,7 +51,8 @@ Playwright covers the executable local acceptance path:
 
 1. Open Sentinel and launch the seeded public demo.
 2. Create a mission through the API fixture, add a UAV, verify an unrouted mission
-   cannot start, and add a waypoint by clicking the planner map.
+   cannot start, verify that OpenFreeMap rendered geographic features (not only an
+   empty canvas), and add a waypoint by clicking the planner map.
 3. Enter the planner, create a run, and start the live simulation.
 4. Observe the live vehicle surface and telemetry connection.
 5. Inject an allowed failure and wait for persisted completion.

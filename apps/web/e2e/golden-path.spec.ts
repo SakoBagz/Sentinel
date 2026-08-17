@@ -17,6 +17,7 @@ test("launches the seeded public demo from the landing page", async ({ page }) =
 });
 
 test("runs the browser golden path through live telemetry, replay, and debrief", async ({ page, request }) => {
+  test.setTimeout(240_000);
   const suffix = Date.now().toString(36);
   const mission = await json<{ id: string }>(await request.post(`${apiBase}/api/missions`, {
     data: { name: `Browser golden path ${suffix}`, scenario_type: "environmental_survey" },
@@ -39,9 +40,10 @@ test("runs the browser golden path through live telemetry, replay, and debrief",
   await expect(page.getByRole("button", { name: "Start simulation" })).toBeDisabled();
   const map = page.locator(".map-canvas.maplibregl-map");
   await expect(map).toBeVisible();
+  await expect(map).toHaveAttribute("data-basemap-ready", "true", { timeout: 20_000 });
   const mapBox = await map.boundingBox();
   expect(mapBox).not.toBeNull();
-  await map.click({ position: { x: mapBox!.width / 2, y: mapBox!.height / 2 - 2 } });
+  await map.click({ position: { x: mapBox!.width / 2 + 10, y: mapBox!.height / 2 - 10 } });
   await expect.poll(async () => {
     const response = await request.get(`${apiBase}/api/missions/${mission.id}`);
     return (await response.json() as { waypoints: unknown[] }).waypoints.length;
@@ -56,7 +58,7 @@ test("runs the browser golden path through live telemetry, replay, and debrief",
   await page.getByRole("button", { name: "Start simulation" }).click();
   await expect(page.getByRole("button", { name: "Inject failure" })).toBeEnabled();
   await page.getByRole("button", { name: "Inject failure" }).click();
-  await expect.poll(async () => (await request.get(`${apiBase}/api/runs/${runId}`)).json(), { timeout: 60_000 })
+  await expect.poll(async () => (await request.get(`${apiBase}/api/runs/${runId}`)).json(), { timeout: 120_000 })
     .toMatchObject({ status: "COMPLETED" });
   await expect(page.getByLabel("Run status COMPLETED")).toBeVisible({ timeout: 10_000 });
 

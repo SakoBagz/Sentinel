@@ -17,6 +17,6 @@
     "test:web": "npm --workspace apps/web run test"
   },
   "dependencies": {
-    "maplibre-gl": "^6.3.0"
+    "maplibre-gl": "5.12.0"
   }
 }

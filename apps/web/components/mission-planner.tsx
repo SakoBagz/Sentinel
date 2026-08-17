@@ -23,6 +23,8 @@ export function MissionPlanner({ missionId }: Props) {
   const [callsign, setCallsign] = useState("");
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [basemapReady, setBasemapReady] = useState(false);
+  const [basemapError, setBasemapError] = useState(false);
   const router = useRouter();
 
   const reload = useCallback(async () => {
@@ -62,6 +64,10 @@ export function MissionPlanner({ missionId }: Props) {
       zoom: 10,
     });
     map.addControl(new maplibregl.NavigationControl(), "top-right");
+    map.on("idle", () => {
+      if (map.queryRenderedFeatures().length > 0) setBasemapReady(true);
+    });
+    map.on("error", () => setBasemapError(true));
     map.on("click", async (event) => {
       const vehicleId = selectedVehicleRef.current;
       const currentMission = missionRef.current;
@@ -203,7 +209,7 @@ export function MissionPlanner({ missionId }: Props) {
       {error && <div className="notice error">{error}</div>}
       <div className="workspace">
         <aside className="rail"><div className="eyebrow">UAV fleet</div><form className="inline-form" onSubmit={handleAddVehicle}><input aria-label="Callsign" placeholder="UAV-004" value={callsign} onChange={(event) => setCallsign(event.target.value)} /><button className="button" disabled={busy}>Add</button></form><div className="list">{mission.vehicles.map((vehicle) => <button className={`list-item selectable ${selectedVehicle === vehicle.id ? "selected" : ""}`} key={vehicle.id} onClick={() => setSelectedVehicle(vehicle.id)}><strong>{vehicle.callsign}</strong><span>{vehicle.vehicle_type} · {mission.waypoints.filter((item) => item.vehicle_id === vehicle.id).length} waypoints</span></button>)}</div></aside>
-        <section className="map-shell"><div ref={mapNode} className="map-canvas" /><div className="map-hint">Select a UAV, then click the map to place a waypoint.</div></section>
+        <section className="map-shell"><div ref={mapNode} className="map-canvas" data-basemap-ready={basemapReady} /><div className={`map-hint ${basemapError ? "error" : ""}`}>{basemapError ? "Basemap unavailable. Check the map connection and retry." : basemapReady ? "Select a UAV, then click the map to place a waypoint." : "Loading basemap…"}</div></section>
         <aside className="inspector"><div className="eyebrow">Mission config</div><label className="field">Name<input value={name} onChange={(event) => setName(event.target.value)} /></label><div className="metric"><span>Status</span><strong>{mission.status}</strong></div><div className="metric"><span>Vehicles</span><strong>{mission.vehicles.length}</strong></div><div className="metric"><span>Waypoints</span><strong>{mission.waypoints.length}</strong></div>{selectedWaypoint && <div className="failure-panel"><div className="eyebrow">Selected waypoint</div><div className="card-copy">Route point {selectedWaypoint.sequence + 1} · {selectedWaypoint.action}</div><label className="field">Latitude<input type="number" step="0.000001" value={selectedWaypoint.latitude} onChange={(event) => setMission((current) => current && ({ ...current, waypoints: current.waypoints.map((item) => item.id === selectedWaypoint.id ? { ...item, latitude: Number(event.target.value) } : item) }))} /></label><label className="field">Longitude<input type="number" step="0.000001" value={selectedWaypoint.longitude} onChange={(event) => setMission((current) => current && ({ ...current, waypoints: current.waypoints.map((item) => item.id === selectedWaypoint.id ? { ...item, longitude: Number(event.target.value) } : item) }))} /></label><label className="field">Altitude (m)<input type="number" min={0} value={selectedWaypoint.altitude_m} onChange={(event) => setMission((current) => current && ({ ...current, waypoints: current.waypoints.map((item) => item.id === selectedWaypoint.id ? { ...item, altitude_m: Number(event.target.value) } : item) }))} /></label><label className="field">Action<select value={selectedWaypoint.action} onChange={(event) => setMission((current) => current && ({ ...current, waypoints: current.waypoints.map((item) => item.id === selectedWaypoint.id ? { ...item, action: event.target.value as Waypoint["action"] } : item) }))}><option value="TRANSIT">TRANSIT</option><option value="HOLD">HOLD</option><option value="SURVEY">SURVEY</option><option value="RETURN">RETURN</option></select></label><div className="actions compact"><button className="button" disabled={busy} onClick={saveWaypoint}>Save point</button><button className="button" disabled={busy} onClick={removeSelectedWaypoint}>Delete</button></div></div>}</aside>
       </div>
     </main>
