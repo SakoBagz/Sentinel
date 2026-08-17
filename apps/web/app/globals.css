@@ -91,13 +91,17 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .field-orbit { position: absolute; top: 50%; left: 50%; border: 1px solid rgba(217, 221, 225, .48); border-radius: 50%; transform: translate(-50%, -50%); }
 .orbit-a { width: 214px; height: 214px; transform: translate(-50%, -50%) rotate(24deg) scaleY(.42); }
 .orbit-b { width: 188px; height: 188px; transform: translate(-50%, -50%) rotate(-35deg) scaleY(.64); border-color: rgba(160, 166, 173, .55); }
-.fallback-uav { position: absolute; top: 50%; left: 50%; width: 190px; height: 104px; transform: translate(-50%, -50%) rotate(-8deg); }
-.fallback-uav-body { position: absolute; top: 30px; left: 67px; width: 58px; height: 46px; border: 1px solid var(--ink); border-radius: 48% 48% 38% 38%; background: linear-gradient(90deg, var(--line-strong), var(--muted), var(--line-strong)); transform: rotate(90deg); box-shadow: 0 8px 20px rgba(0, 0, 0, .3); }
-.fallback-uav-nose { position: absolute; top: 29px; left: 91px; width: 0; height: 0; border-top: 11px solid transparent; border-bottom: 11px solid transparent; border-right: 26px solid var(--ink); transform: rotate(2deg); }
-.fallback-uav-wing { position: absolute; top: 39px; width: 82px; height: 16px; border: 1px solid var(--line-strong); background: var(--muted); }
-.fallback-uav-wing-left { left: 3px; clip-path: polygon(0 38%, 100% 0, 90% 100%, 16% 82%); }
-.fallback-uav-wing-right { right: 3px; clip-path: polygon(0 0, 100% 38%, 84% 82%, 10% 100%); }
-.fallback-uav-tail { position: absolute; top: 28px; left: 28px; width: 43px; height: 8px; border: 1px solid var(--line-strong); background: var(--quiet); transform: rotate(-4deg); }
+.fallback-uav { position: absolute; top: 50%; left: 50%; width: 260px; height: 130px; transform: translate(-50%, -50%) rotate(-8deg); }
+.fallback-uav-body { position: absolute; top: 50px; left: 82px; width: 105px; height: 27px; border: 1px solid var(--ink); border-radius: 56% 42% 42% 48%; background: var(--muted); box-shadow: 0 8px 20px rgba(0, 0, 0, .3); }
+.fallback-uav-nose { position: absolute; top: 54px; left: 61px; width: 0; height: 0; border-top: 10px solid transparent; border-bottom: 10px solid transparent; border-right: 26px solid var(--ink); transform: rotate(2deg); }
+.fallback-uav-wing { position: absolute; top: 57px; width: 132px; height: 12px; border: 1px solid var(--line-strong); background: var(--muted); }
+.fallback-uav-wing-left { left: 3px; clip-path: polygon(0 45%, 100% 0, 92% 100%, 12% 82%); }
+.fallback-uav-wing-right { right: 3px; clip-path: polygon(0 0, 100% 45%, 88% 82%, 8% 100%); }
+.fallback-uav-tail { position: absolute; left: 157px; width: 43px; height: 7px; border: 1px solid var(--line-strong); background: var(--quiet); }
+.fallback-uav-tail-left { top: 39px; transform: rotate(22deg); }
+.fallback-uav-tail-right { top: 77px; transform: rotate(-22deg); }
+.fallback-uav-propeller { position: absolute; top: 45px; left: 185px; width: 3px; height: 36px; border-radius: 50%; background: var(--ink); transform: rotate(7deg); }
+.fallback-uav-propeller::before { position: absolute; top: 16px; left: -11px; width: 25px; height: 3px; border-radius: 50%; background: var(--ink); content: ""; }
 .overview-field-caption { position: absolute; right: 18px; bottom: 16px; left: 18px; z-index: 2; display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
 .overview-field-label { position: absolute; top: 30px; left: 30px; z-index: 2; display: grid; gap: 5px; color: var(--quiet); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; letter-spacing: .1em; }
 .workflow-step h2 { display: flex; align-items: center; gap: 8px; }

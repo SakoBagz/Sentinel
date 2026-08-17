@@ -24,7 +24,7 @@ export function OverviewField() {
 
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(32, 1, 0.1, 100);
-    camera.position.set(0, 0.12, 6.8);
+    camera.position.set(0, 0.12, 7.4);
 
     let renderer: THREE.WebGLRenderer;
     try {
@@ -45,7 +45,7 @@ export function OverviewField() {
     scene.add(rimLight);
 
     const system = new THREE.Group();
-    system.rotation.set(-0.18, -0.42, 0.08);
+    system.rotation.set(-0.22, -0.68, 0.08);
     scene.add(system);
 
     const bodyMaterial = new THREE.MeshStandardMaterial({ color: 0xb5bbc1, metalness: 0.45, roughness: 0.48 });
@@ -54,47 +54,70 @@ export function OverviewField() {
     const darkMaterial = new THREE.MeshStandardMaterial({ color: 0x343a41, metalness: 0.7, roughness: 0.35 });
 
     const uav = new THREE.Group();
-    uav.scale.setScalar(1.18);
+    uav.scale.setScalar(1.05);
     uav.rotation.set(0.12, 0.12, -0.04);
     system.add(uav);
 
     const fuselage = new THREE.Mesh(new THREE.SphereGeometry(1, 24, 16), bodyMaterial);
-    fuselage.scale.set(0.34, 0.2, 1.18);
+    fuselage.scale.set(0.3, 0.19, 1.3);
     fuselage.position.z = 0.05;
     uav.add(fuselage);
 
-    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.22, 0.52, 18), accentMaterial);
+    const nose = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.56, 18), accentMaterial);
     nose.rotation.x = -Math.PI / 2;
-    nose.position.z = -1.16;
+    nose.position.z = -1.28;
     uav.add(nose);
 
-    const wings = new THREE.Mesh(new THREE.BoxGeometry(2.85, 0.07, 0.42), wingMaterial);
-    wings.position.set(0, 0, 0.12);
-    wings.rotation.y = -0.05;
-    uav.add(wings);
+    // A tapered, high-aspect-ratio wing gives the aircraft its long-endurance silhouette.
+    const wingShape = new THREE.Shape();
+    wingShape.moveTo(0, -0.42);
+    wingShape.lineTo(2.18, 0.12);
+    wingShape.lineTo(2.04, 0.34);
+    wingShape.lineTo(0, 0.08);
+    wingShape.closePath();
+    const wingGeometry = new THREE.ExtrudeGeometry(wingShape, {
+      bevelEnabled: false,
+      depth: 0.07,
+    });
+    wingGeometry.rotateX(Math.PI / 2);
 
-    const wingTips = new THREE.Mesh(new THREE.BoxGeometry(2.05, 0.055, 0.22), darkMaterial);
-    wingTips.position.set(0, 0.02, 0.32);
-    wingTips.rotation.y = 0.08;
-    uav.add(wingTips);
+    const rightWing = new THREE.Mesh(wingGeometry, wingMaterial);
+    rightWing.position.y = -0.035;
+    const leftWing = rightWing.clone();
+    leftWing.scale.x = -1;
+    uav.add(rightWing, leftWing);
 
-    const tailplane = new THREE.Mesh(new THREE.BoxGeometry(1.02, 0.055, 0.27), wingMaterial);
-    tailplane.position.z = 0.88;
-    tailplane.rotation.y = 0.12;
-    uav.add(tailplane);
+    const wingletGeometry = new THREE.BoxGeometry(0.12, 0.28, 0.18);
+    const rightWinglet = new THREE.Mesh(wingletGeometry, darkMaterial);
+    rightWinglet.position.set(2.05, 0.12, 0.26);
+    rightWinglet.rotation.z = -0.12;
+    const leftWinglet = rightWinglet.clone();
+    leftWinglet.position.x = -2.05;
+    leftWinglet.rotation.z = 0.12;
+    uav.add(rightWinglet, leftWinglet);
 
-    const verticalTail = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.4, 0.32), darkMaterial);
-    verticalTail.position.set(0, 0.2, 0.86);
-    verticalTail.rotation.x = -0.16;
-    uav.add(verticalTail);
+    // The split tail is intentionally modeled as a V-tail rather than a conventional fin.
+    const tailplaneGeometry = new THREE.BoxGeometry(0.84, 0.055, 0.2);
+    const rightTailplane = new THREE.Mesh(tailplaneGeometry, wingMaterial);
+    rightTailplane.position.set(0.32, 0.14, 0.98);
+    rightTailplane.rotation.z = -0.34;
+    const leftTailplane = rightTailplane.clone();
+    leftTailplane.position.x = -0.32;
+    leftTailplane.rotation.z = 0.34;
+    uav.add(rightTailplane, leftTailplane);
 
     const sensorPod = new THREE.Mesh(new THREE.SphereGeometry(0.15, 16, 10), accentMaterial);
     sensorPod.scale.set(0.9, 0.7, 1.25);
-    sensorPod.position.set(0, -0.17, -0.25);
+    sensorPod.position.set(0, -0.18, -0.34);
     uav.add(sensorPod);
 
+    const engineFairing = new THREE.Mesh(new THREE.CylinderGeometry(0.14, 0.1, 0.42, 16), darkMaterial);
+    engineFairing.rotation.x = Math.PI / 2;
+    engineFairing.position.z = 1.17;
+    uav.add(engineFairing);
+
     const propeller = new THREE.Group();
-    propeller.position.z = -1.42;
+    propeller.position.z = 1.42;
     const propellerHub = new THREE.Mesh(new THREE.CylinderGeometry(0.07, 0.07, 0.13, 12), darkMaterial);
     propellerHub.rotation.x = Math.PI / 2;
     propeller.add(propellerHub);
@@ -149,7 +172,7 @@ export function OverviewField() {
   }, []);
 
   return (
-    <figure className="overview-field" aria-label="Rotating UAV model and simulated flight envelope">
+    <figure className="overview-field" aria-label="Rotating long-endurance fixed-wing UAV model and simulated flight envelope">
       <div className="overview-field-fallback" aria-hidden="true">
         <span className="field-orbit orbit-a" />
         <span className="field-orbit orbit-b" />
@@ -158,16 +181,18 @@ export function OverviewField() {
           <span className="fallback-uav-body" />
           <span className="fallback-uav-wing fallback-uav-wing-left" />
           <span className="fallback-uav-wing fallback-uav-wing-right" />
-          <span className="fallback-uav-tail" />
+          <span className="fallback-uav-tail fallback-uav-tail-left" />
+          <span className="fallback-uav-tail fallback-uav-tail-right" />
+          <span className="fallback-uav-propeller" />
         </span>
       </div>
       <canvas ref={canvasRef} />
       <figcaption className="overview-field-caption">
-        <span>UAV flight envelope</span>
+        <span>Long-endurance UAV</span>
         <span>Visual only · no control authority</span>
       </figcaption>
       <div className="overview-field-label" aria-hidden="true">
-        <span>SIMULATED AIRCRAFT</span>
+        <span>FIXED-WING UAV</span>
         <span>DETERMINISTIC / REPLAYABLE</span>
       </div>
     </figure>
