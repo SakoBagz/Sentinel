@@ -6,6 +6,7 @@ describe("mission readiness", () => {
   it("blocks an empty mission with actionable checks", () => {
     const result = evaluateMissionReadiness({
       name: "",
+      nameSaved: false,
       vehicleCount: 0,
       routedVehicleCount: 0,
       hasSharedRoute: false,
@@ -13,12 +14,13 @@ describe("mission readiness", () => {
     });
 
     expect(result.ready).toBe(false);
-    expect(result.checks.filter((check) => !check.ready).map((check) => check.id)).toEqual(["identity", "fleet", "routes", "map"]);
+    expect(result.checks.filter((check) => !check.ready).map((check) => check.id)).toEqual(["identity", "saved", "fleet", "routes", "map"]);
   });
 
   it("passes when every vehicle has a route and the map is ready", () => {
     const result = evaluateMissionReadiness({
       name: "Wildfire survey",
+      nameSaved: true,
       vehicleCount: 3,
       routedVehicleCount: 3,
       hasSharedRoute: false,
@@ -32,6 +34,7 @@ describe("mission readiness", () => {
   it("allows one shared route to cover the fleet", () => {
     const result = evaluateMissionReadiness({
       name: "Search grid",
+      nameSaved: true,
       vehicleCount: 4,
       routedVehicleCount: 0,
       hasSharedRoute: true,
@@ -45,6 +48,7 @@ describe("mission readiness", () => {
   it("keeps launch blocked until the map is available", () => {
     const result = evaluateMissionReadiness({
       name: "Infrastructure inspection",
+      nameSaved: true,
       vehicleCount: 1,
       routedVehicleCount: 1,
       hasSharedRoute: false,

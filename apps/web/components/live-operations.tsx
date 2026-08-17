@@ -3,9 +3,13 @@
 import "maplibre-gl/dist/maplibre-gl.css";
 
 import * as maplibregl from "maplibre-gl";
+import { Pause, Play, Radio, Search, Square, TriangleAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 
+import { PageHeader } from "@/components/page-header";
+import { RunNavigation } from "@/components/run-navigation";
+import { StatusBadge, statusTone } from "@/components/status-badge";
 import { createFailure, failureTypes, getMetrics, getMission, getRun, getRunSnapshot, Mission, pauseRun, resumeRun, Run, RunMetrics, startRun, stopRun, FailureType } from "@/lib/api";
 import { LiveEvent, MissionState, VehicleTelemetry, useLiveTelemetry } from "@/stores/live-telemetry";
 
@@ -26,14 +30,16 @@ type LiveMapProps = {
   vehicles: Record<string, VehicleTelemetry>;
   history: Record<string, VehicleTelemetry[]>;
   plannedRoutes: Record<string, [number, number][]>;
+  callsigns: Record<string, string>;
   selectedVehicleId: string | null;
   onSelect: (id: string) => void;
 };
 
-function LiveMap({ vehicles, history, plannedRoutes, selectedVehicleId, onSelect }: LiveMapProps) {
+function LiveMap({ vehicles, history, plannedRoutes, callsigns, selectedVehicleId, onSelect }: LiveMapProps) {
   const node = useRef<HTMLDivElement>(null);
   const map = useRef<maplibregl.Map | null>(null);
   const markers = useRef<Record<string, maplibregl.Marker>>({});
+
   useEffect(() => {
     if (!node.current || map.current) return;
     const instance = new maplibregl.Map({ container: node.current, style: "https://tiles.openfreemap.org/styles/liberty", center: [-118.24, 34.15], zoom: 10 });
@@ -41,15 +47,16 @@ function LiveMap({ vehicles, history, plannedRoutes, selectedVehicleId, onSelect
     map.current = instance;
     return () => { instance.remove(); map.current = null; };
   }, []);
+
   useEffect(() => {
     const instance = map.current;
     if (!instance) return;
     for (const [vehicleId, telemetry] of Object.entries(vehicles)) {
-      const marker = markers.current[vehicleId] ?? new maplibregl.Marker({ color: telemetry.communicationsState === "HEALTHY" ? "#53c7a3" : "#f0b45b" })
-        .setLngLat([telemetry.longitude, telemetry.latitude])
-        .addTo(instance);
-      marker.setLngLat([telemetry.longitude, telemetry.latitude]).setPopup(new maplibregl.Popup().setText(vehicleId));
+      const marker = markers.current[vehicleId] ?? new maplibregl.Marker({ color: "#d9dde1" }).setLngLat([telemetry.longitude, telemetry.latitude]).addTo(instance);
+      marker.setLngLat([telemetry.longitude, telemetry.latitude]).setPopup(new maplibregl.Popup().setText(callsigns[vehicleId] ?? vehicleId));
       const markerElement = marker.getElement();
+      markerElement.setAttribute("role", "button");
+      markerElement.setAttribute("aria-label", `${callsigns[vehicleId] ?? vehicleId} live position`);
       let heading = markerElement.querySelector<HTMLElement>(".sentinel-marker-heading");
       if (!heading) {
         heading = document.createElement("span");
@@ -59,13 +66,15 @@ function LiveMap({ vehicles, history, plannedRoutes, selectedVehicleId, onSelect
       }
       heading.style.transform = `rotate(${telemetry.headingDeg}deg)`;
       marker.getElement().onclick = () => onSelect(vehicleId);
+      marker.getElement().tabIndex = 0;
+      marker.getElement().onkeydown = (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(vehicleId); } };
       markers.current[vehicleId] = marker;
     }
     for (const [vehicleId, marker] of Object.entries(markers.current)) {
       if (!vehicles[vehicleId]) { marker.remove(); delete markers.current[vehicleId]; }
-      else marker.getElement().style.opacity = selectedVehicleId && selectedVehicleId !== vehicleId ? "0.55" : "1";
+      else marker.getElement().style.opacity = selectedVehicleId && selectedVehicleId !== vehicleId ? "0.45" : "1";
     }
-  }, [vehicles, selectedVehicleId, onSelect]);
+  }, [vehicles, selectedVehicleId, onSelect, callsigns]);
 
   useEffect(() => {
     const instance = map.current;
@@ -74,29 +83,16 @@ function LiveMap({ vehicles, history, plannedRoutes, selectedVehicleId, onSelect
       if (!instance.isStyleLoaded()) return;
       const trails = Object.entries(history)
         .filter(([, samples]) => samples.length > 1)
-        .map(([vehicleId, samples]) => ({
-          type: "Feature" as const,
-          properties: { vehicleId },
-          geometry: { type: "LineString" as const, coordinates: samples.map((sample) => [sample.longitude, sample.latitude]) },
-        }));
+        .map(([vehicleId, samples]) => ({ type: "Feature" as const, properties: { vehicleId }, geometry: { type: "LineString" as const, coordinates: samples.map((sample) => [sample.longitude, sample.latitude]) } }));
       const routes = Object.entries(plannedRoutes)
         .filter(([, coordinates]) => coordinates.length > 1)
-        .map(([vehicleId, coordinates]) => ({
-          type: "Feature" as const,
-          properties: { vehicleId },
-          geometry: { type: "LineString" as const, coordinates },
-        }));
+        .map(([vehicleId, coordinates]) => ({ type: "Feature" as const, properties: { vehicleId }, geometry: { type: "LineString" as const, coordinates } }));
       for (const [sourceId, data] of [["sentinel-live-trails", trails], ["sentinel-planned-routes", routes]] as const) {
         const source = instance.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
         if (source) source.setData({ type: "FeatureCollection", features: data } as GeoJSON.FeatureCollection);
         else {
           instance.addSource(sourceId, { type: "geojson", data: { type: "FeatureCollection", features: data } });
-          instance.addLayer({
-            id: `${sourceId}-line`,
-            type: "line",
-            source: sourceId,
-            paint: { "line-color": sourceId === "sentinel-planned-routes" ? "#8b9bad" : "#53c7a3", "line-width": 2, "line-opacity": sourceId === "sentinel-planned-routes" ? 0.65 : 0.85 },
-          });
+          instance.addLayer({ id: `${sourceId}-line`, type: "line", source: sourceId, paint: { "line-color": sourceId === "sentinel-planned-routes" ? "#aeb5bc" : "#f1f2f3", "line-width": 2, "line-opacity": sourceId === "sentinel-planned-routes" ? 0.66 : 0.86 } });
         }
       }
     };
@@ -104,6 +100,7 @@ function LiveMap({ vehicles, history, plannedRoutes, selectedVehicleId, onSelect
     else instance.once("load", updateLines);
     return () => { instance.off("load", updateLines); };
   }, [history, plannedRoutes]);
+
   return <div className="map-canvas" ref={node} />;
 }
 
@@ -114,9 +111,14 @@ function telemetryFromEnvelope(value: z.infer<typeof envelopeSchema>): VehicleTe
     vehicleId: value.vehicle_id,
     sequence: value.sequence,
     simTimeMs: value.sim_time_ms,
-    latitude: asNumber(payload.latitude), longitude: asNumber(payload.longitude), altitudeM: asNumber(payload.altitude_m),
-    headingDeg: asNumber(payload.heading_deg), groundSpeedMps: asNumber(payload.ground_speed_mps), batteryPercent: asNumber(payload.battery_percent),
-    gpsQualityPercent: asNumber(payload.gps_quality_percent, 100), sensorStatus: asString(payload.sensor_status, "AVAILABLE"),
+    latitude: asNumber(payload.latitude),
+    longitude: asNumber(payload.longitude),
+    altitudeM: asNumber(payload.altitude_m),
+    headingDeg: asNumber(payload.heading_deg),
+    groundSpeedMps: asNumber(payload.ground_speed_mps),
+    batteryPercent: asNumber(payload.battery_percent),
+    gpsQualityPercent: asNumber(payload.gps_quality_percent, 100),
+    sensorStatus: asString(payload.sensor_status, "AVAILABLE"),
     missionState: asString(payload.mission_state) as MissionState,
     communicationsState: asString(payload.communications_state, "HEALTHY") as VehicleTelemetry["communicationsState"],
   };
@@ -140,36 +142,71 @@ function telemetryFromSnapshot(value: NonNullable<Awaited<ReturnType<typeof getR
   };
 }
 
-function OperationalDiagnostics({
-  metrics,
-  metricsError,
-  connection,
-  duplicates,
-  missing,
-  outOfOrder,
-}: {
-  metrics: RunMetrics | null;
-  metricsError: string | null;
-  connection: string;
-  duplicates: number;
-  missing: number;
-  outOfOrder: number;
-}) {
-  return <section className="card diagnostics-card" aria-label="Operational diagnostics">
-    <div className="diagnostics-header"><div><div className="eyebrow">Operational diagnostics</div><h2>Control-plane health</h2></div><span className={`diagnostics-badge ${metrics ? "ready" : "warning"}`}><span className="status-dot" />{metrics ? "Durable metrics" : "Awaiting persistence"}</span></div>
-    <div className="diagnostic-grid">
-      <div className="metric"><span>Persisted telemetry</span><strong>{metrics?.telemetry_messages_received.toLocaleString() ?? "—"}</strong></div>
-      <div className="metric"><span>Telemetry rate</span><strong>{metrics ? `${metrics.telemetry_throughput_per_second.toFixed(1)} msg/s` : "—"}</strong></div>
-      <div className="metric"><span>p95 delivery latency</span><strong>{metrics ? `${metrics.latency_p95_ms.toFixed(1)} ms` : "—"}</strong></div>
-      <div className="metric"><span>Comms availability</span><strong>{metrics ? `${metrics.communications_availability_percent.toFixed(1)}%` : "—"}</strong></div>
-    </div>
-    <div className="diagnostic-foot"><span>WebSocket <strong>{connection}</strong></span><span>Browser gaps <strong>{missing}</strong></span><span>Duplicates <strong>{duplicates}</strong></span><span>Out of order <strong>{outOfOrder}</strong></span></div>
-    {metricsError && <div className="notice">Durable metrics are temporarily unavailable; the live telemetry stream remains active.</div>}
-  </section>;
+function OperationalDiagnostics({ metrics, metricsError, connection, duplicates, missing, outOfOrder }: { metrics: RunMetrics | null; metricsError: string | null; connection: string; duplicates: number; missing: number; outOfOrder: number }) {
+  return (
+    <section className="card diagnostics-card" aria-label="Operational diagnostics">
+      <div className="diagnostics-header"><div><div className="eyebrow">Operational diagnostics</div><h2>Control-plane health</h2></div><span className={`diagnostics-badge ${metrics ? "ready" : "warning"}`}><span className="status-dot" />{metrics ? "Durable metrics" : "Awaiting persistence"}</span></div>
+      <div className="diagnostic-grid">
+        <div className="metric"><span>Persisted telemetry</span><strong>{metrics?.telemetry_messages_received.toLocaleString() ?? "—"}</strong></div>
+        <div className="metric"><span>Telemetry rate</span><strong>{metrics ? `${metrics.telemetry_throughput_per_second.toFixed(1)} msg/s` : "—"}</strong></div>
+        <div className="metric"><span>p95 delivery latency</span><strong>{metrics ? `${metrics.latency_p95_ms.toFixed(1)} ms` : "—"}</strong></div>
+        <div className="metric"><span>Communications availability</span><strong>{metrics ? `${metrics.communications_availability_percent.toFixed(1)}%` : "—"}</strong></div>
+      </div>
+      <div className="diagnostic-foot"><span>WebSocket <strong>{connection}</strong></span><span>Browser gaps <strong>{missing}</strong></span><span>Duplicates <strong>{duplicates}</strong></span><span>Out of order <strong>{outOfOrder}</strong></span></div>
+      {metricsError && <div className="notice">Durable metrics are temporarily unavailable; the live telemetry stream remains active.</div>}
+    </section>
+  );
+}
+
+function VehicleDetail({ selected }: { selected: VehicleTelemetry | undefined }) {
+  return (
+    <section className="inspector-section" aria-labelledby="vehicle-detail-heading">
+      <div className="eyebrow">Selected vehicle</div>
+      <h3 id="vehicle-detail-heading">Vehicle detail</h3>
+      {selected ? (
+        <div className="vehicle-summary">
+          <div className="metric"><span>Mission state</span><strong>{selected.missionState}</strong></div>
+          <div className="metric"><span>Communications</span><strong>{selected.communicationsState}</strong></div>
+          <div className="metric"><span>Battery</span><strong>{selected.batteryPercent.toFixed(1)}%</strong></div>
+          <div className="metric"><span>Altitude</span><strong>{selected.altitudeM.toFixed(1)} m</strong></div>
+          <div className="metric"><span>Ground speed</span><strong>{selected.groundSpeedMps.toFixed(1)} m/s</strong></div>
+          <div className="metric"><span>GPS quality</span><strong>{selected.gpsQualityPercent.toFixed(0)}%</strong></div>
+          <div className="metric"><span>Telemetry sequence</span><strong>{selected.sequence}</strong></div>
+        </div>
+      ) : <div className="empty-state"><Radio size={17} aria-hidden="true" /><strong>Waiting for telemetry.</strong><p>Select a vehicle after the run starts to inspect its latest state.</p></div>}
+    </section>
+  );
+}
+
+function FailureInjectionPanel({ run, selected, failureType, failureDuration, failureVehicleId, busy, onVehicleChange, onTypeChange, onDurationChange, onInject }: { run: Run; selected: VehicleTelemetry | undefined; failureType: FailureType; failureDuration: number; failureVehicleId: string; busy: boolean; onVehicleChange: (value: string) => void; onTypeChange: (value: FailureType) => void; onDurationChange: (value: number) => void; onInject: () => void }) {
+  return (
+    <section className="failure-panel" aria-labelledby="failure-heading">
+      <div><div className="eyebrow">Simulation control</div><h3 id="failure-heading">Inject a simulated fault</h3><p className="inspector-description">Adds an auditable impairment to the selected run vehicle. It never controls physical hardware.</p></div>
+      <label className="field">Target vehicle<select value={failureVehicleId} onChange={(event) => onVehicleChange(event.target.value)} disabled={run.vehicles.length === 0}><option value="">{selected ? "Selected vehicle" : "Choose a vehicle"}</option>{run.vehicles.map((vehicle) => <option value={vehicle.id} key={vehicle.id}>{vehicle.callsign}</option>)}</select></label>
+      <label className="field">Fault type<select value={failureType} onChange={(event) => onTypeChange(event.target.value as FailureType)}>{failureTypes.map((type) => <option key={type} value={type}>{type.replaceAll("_", " ")}</option>)}</select></label>
+      <label className="field">Duration (seconds)<input type="number" min={1} max={900} value={failureDuration} onChange={(event) => onDurationChange(Number(event.target.value))} /></label>
+      <button className="button" type="button" disabled={busy || run.status !== "RUNNING" || (!failureVehicleId && !selected)} onClick={onInject}><TriangleAlert size={13} aria-hidden="true" /> Inject simulated fault</button>
+    </section>
+  );
+}
+
+function EventTimeline({ events, search, severity, warningsFirst, onSearch, onSeverity, onSort }: { events: LiveEvent[]; search: string; severity: "ALL" | LiveEvent["severity"]; warningsFirst: boolean; onSearch: (value: string) => void; onSeverity: (value: "ALL" | LiveEvent["severity"]) => void; onSort: () => void }) {
+  return (
+    <section className="inspector-section" aria-labelledby="event-timeline-heading">
+      <div className="eyebrow">Event stream</div><h3 id="event-timeline-heading">Live event timeline</h3>
+      <div className="event-toolbar">
+        <label className="field"><span className="sr-only">Search events</span><span className="input-with-icon"><Search size={13} aria-hidden="true" /><input aria-label="Filter live events" value={search} onChange={(event) => onSearch(event.target.value)} placeholder="Type or vehicle" /></span></label>
+        <label className="field">Severity<select aria-label="Event severity" value={severity} onChange={(event) => onSeverity(event.target.value as "ALL" | LiveEvent["severity"])}><option value="ALL">All severities</option><option value="CRITICAL">Critical</option><option value="WARNING">Warning</option><option value="INFO">Info</option></select></label>
+        <div className="event-toolbar-actions"><span className="save-state">{events.length} visible event{events.length === 1 ? "" : "s"}</span><button className="button" type="button" onClick={onSort}>{warningsFirst ? "Warnings first" : "Newest first"}</button></div>
+      </div>
+      <div className="events">{events.length === 0 ? <div className="event-empty">No events match the current filters.</div> : events.slice(0, 40).map((event) => <div className={`event ${event.severity.toLowerCase()}`} key={event.eventId}><strong>{event.type}</strong><span>{event.vehicleId ?? "SYSTEM"} · {event.simTimeMs} ms · {event.severity}</span></div>)}</div>
+    </section>
+  );
 }
 
 export function LiveOperations({ runId }: { runId: string }) {
   const [run, setRun] = useState<Run | null>(null);
+  const [mission, setMission] = useState<Mission | null>(null);
   const [metrics, setMetrics] = useState<RunMetrics | null>(null);
   const [metricsError, setMetricsError] = useState<string | null>(null);
   const [plannedRoutes, setPlannedRoutes] = useState<Record<string, [number, number][]>>({});
@@ -177,41 +214,45 @@ export function LiveOperations({ runId }: { runId: string }) {
   const [starting, setStarting] = useState(false);
   const [failureType, setFailureType] = useState<FailureType>("COMMUNICATIONS_BLACKOUT");
   const [failureDuration, setFailureDuration] = useState(10);
+  const [failureVehicleId, setFailureVehicleId] = useState("");
   const [fleetSearch, setFleetSearch] = useState("");
   const [eventSeverityFilter, setEventSeverityFilter] = useState<"ALL" | LiveEvent["severity"]>("ALL");
   const [eventSearch, setEventSearch] = useState("");
   const [warningsFirst, setWarningsFirst] = useState(true);
   const { vehicles, history, events, connection, selectedVehicleId, duplicates, missing, outOfOrder, setConnection, selectVehicle, ingestTelemetry, hydrateTelemetry, ingestEvent, reset } = useLiveTelemetry();
   const metricsLive = run?.status === "READY" || run?.status === "RUNNING" || run?.status === "PAUSED";
+
   useEffect(() => {
     reset();
     getRun(runId).then(async (loadedRun) => {
       setRun(loadedRun);
+      setFailureVehicleId(loadedRun.vehicles[0]?.id ?? "");
       try {
-        const mission: Mission = await getMission(loadedRun.mission_id);
+        const loadedMission = await getMission(loadedRun.mission_id);
+        setMission(loadedMission);
         const runVehicleByDefinition = new Map(loadedRun.vehicles.map((vehicle) => [vehicle.vehicle_definition_id, vehicle.id]));
-        const missionVehicleToRunVehicle = new Map(mission.vehicles.map((vehicle) => [vehicle.id, runVehicleByDefinition.get(vehicle.vehicle_definition_id)]));
+        const missionVehicleToRunVehicle = new Map(loadedMission.vehicles.map((vehicle) => [vehicle.id, runVehicleByDefinition.get(vehicle.vehicle_definition_id)]));
         const routes: Record<string, [number, number][]> = {};
-        for (const waypoint of mission.waypoints) {
+        for (const waypoint of loadedMission.waypoints) {
           const runVehicleId = waypoint.vehicle_id ? missionVehicleToRunVehicle.get(waypoint.vehicle_id) : undefined;
           if (!runVehicleId) continue;
           (routes[runVehicleId] ??= []).push([waypoint.longitude, waypoint.latitude]);
         }
         setPlannedRoutes(routes);
-      } catch { /* a run can still be observed if its mission definition is unavailable */ }
+      } catch {
+        setError("Mission definition unavailable; live telemetry remains available.");
+      }
     }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Unable to load run"));
     return reset;
   }, [runId, reset]);
+
   useEffect(() => {
     let active = true;
     let timer: ReturnType<typeof setTimeout> | undefined;
     const refresh = async () => {
       try {
         const value = await getMetrics(runId);
-        if (active) {
-          setMetrics(value);
-          setMetricsError(null);
-        }
+        if (active) { setMetrics(value); setMetricsError(null); }
       } catch (reason: unknown) {
         if (active) setMetricsError(reason instanceof Error ? reason.message : "Unable to load durable metrics");
       } finally {
@@ -221,6 +262,7 @@ export function LiveOperations({ runId }: { runId: string }) {
     void refresh();
     return () => { active = false; if (timer) clearTimeout(timer); };
   }, [runId, metricsLive]);
+
   useEffect(() => {
     const wsBase = process.env.NEXT_PUBLIC_WS_BASE_URL ?? "ws://localhost:8000";
     let socket: WebSocket | null = null;
@@ -228,36 +270,17 @@ export function LiveOperations({ runId }: { runId: string }) {
     let heartbeat: ReturnType<typeof setInterval> | undefined;
     let disposed = false;
     let attempts = 0;
-
-    const clearTimers = () => {
-      if (retry) clearTimeout(retry);
-      if (heartbeat) clearInterval(heartbeat);
-      retry = undefined;
-      heartbeat = undefined;
-    };
-
+    const clearTimers = () => { if (retry) clearTimeout(retry); if (heartbeat) clearInterval(heartbeat); retry = undefined; heartbeat = undefined; };
     const connect = () => {
       if (disposed) return;
       setConnection(attempts > 0 ? "RECONNECTING" : "DISCONNECTED");
-      try {
-        socket = new WebSocket(`${wsBase}/ws/runs/${runId}`);
-      } catch {
-        setConnection("RECONNECTING");
-        retry = setTimeout(connect, Math.min(10_000, 500 * 2 ** Math.min(attempts++, 5)));
-        return;
-      }
+      try { socket = new WebSocket(`${wsBase}/ws/runs/${runId}`); } catch { setConnection("RECONNECTING"); retry = setTimeout(connect, Math.min(10_000, 500 * 2 ** Math.min(attempts++, 5))); return; }
       socket.onopen = () => {
         attempts = 0;
         setConnection("LIVE");
-        getRunSnapshot(runId).then((snapshot) => {
-          for (const item of snapshot.vehicles) {
-            if (item.telemetry) hydrateTelemetry(telemetryFromSnapshot(item.telemetry));
-          }
-        }).catch(() => { /* live stream remains the primary path */ });
+        getRunSnapshot(runId).then((snapshot) => { for (const item of snapshot.vehicles) if (item.telemetry) hydrateTelemetry(telemetryFromSnapshot(item.telemetry)); }).catch(() => undefined);
         socket?.send(JSON.stringify({ type: "subscribe", topics: ["telemetry", "events", "metrics"] }));
-        heartbeat = setInterval(() => {
-          if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "ping" }));
-        }, 15_000);
+        heartbeat = setInterval(() => { if (socket?.readyState === WebSocket.OPEN) socket.send(JSON.stringify({ type: "ping" })); }, 15_000);
       };
       socket.onmessage = (message) => {
         try {
@@ -269,32 +292,15 @@ export function LiveOperations({ runId }: { runId: string }) {
           if (telemetry) ingestTelemetry(telemetry);
           if (!telemetry && envelope.data.type !== "vehicle.telemetry") {
             ingestEvent({ eventId: envelope.data.event_id, type: envelope.data.type, severity: envelope.data.severity ?? "INFO", vehicleId: envelope.data.vehicle_id ?? null, simTimeMs: envelope.data.sim_time_ms, payload: envelope.data.payload });
-            if (["mission.started", "mission.paused", "mission.resumed", "mission.completed", "mission.aborted"].includes(envelope.data.type)) {
-              getRun(runId).then(setRun).catch(() => { /* telemetry remains visible if status refresh fails */ });
-            }
+            if (["mission.started", "mission.paused", "mission.resumed", "mission.completed", "mission.aborted"].includes(envelope.data.type)) getRun(runId).then(setRun).catch(() => undefined);
           }
         } catch { setError("Received an invalid realtime message"); }
       };
-      socket.onclose = () => {
-        clearTimers();
-        if (disposed) {
-          setConnection("DISCONNECTED");
-          return;
-        }
-        setConnection("RECONNECTING");
-        const delay = Math.min(10_000, 500 * 2 ** Math.min(attempts++, 5));
-        retry = setTimeout(connect, delay);
-      };
+      socket.onclose = () => { clearTimers(); if (disposed) { setConnection("DISCONNECTED"); return; } setConnection("RECONNECTING"); retry = setTimeout(connect, Math.min(10_000, 500 * 2 ** Math.min(attempts++, 5))); };
       socket.onerror = () => setConnection("RECONNECTING");
     };
-
     connect();
-    return () => {
-      disposed = true;
-      clearTimers();
-      socket?.close();
-      setConnection("DISCONNECTED");
-    };
+    return () => { disposed = true; clearTimers(); socket?.close(); setConnection("DISCONNECTED"); };
   }, [runId, hydrateTelemetry, ingestEvent, ingestTelemetry, setConnection]);
 
   const command = async (action: "start" | "pause" | "resume" | "stop") => {
@@ -305,6 +311,7 @@ export function LiveOperations({ runId }: { runId: string }) {
     } catch (reason: unknown) { setError(reason instanceof Error ? reason.message : `Unable to ${action} run`); }
     finally { setStarting(false); }
   };
+
   const elapsedMs = Math.max(0, ...Object.values(vehicles).map((vehicle) => vehicle.simTimeMs));
   const visibleVehicles = run?.vehicles.filter((vehicle) => vehicle.callsign.toLowerCase().includes(fleetSearch.toLowerCase())) ?? [];
   const visibleEvents = [...events]
@@ -312,13 +319,53 @@ export function LiveOperations({ runId }: { runId: string }) {
     .filter((event) => !eventSearch || `${event.type} ${event.vehicleId ?? ""}`.toLowerCase().includes(eventSearch.toLowerCase()))
     .sort((left, right) => warningsFirst ? ({ CRITICAL: 0, WARNING: 1, INFO: 2 }[left.severity] - { CRITICAL: 0, WARNING: 1, INFO: 2 }[right.severity]) || right.simTimeMs - left.simTimeMs : right.simTimeMs - left.simTimeMs);
   const selected = selectedVehicleId ? vehicles[selectedVehicleId] : Object.values(vehicles)[0];
-  if (!run) return <main className="main"><div className="card">{error ?? "Loading run…"}</div></main>;
+  const callsigns = Object.fromEntries(run?.vehicles.map((vehicle) => [vehicle.id, vehicle.callsign]) ?? []);
+  const targetVehicleId = failureVehicleId || selected?.vehicleId || run?.vehicles[0]?.id || "";
+
   const inject = async () => {
-    const vehicleId = selected?.vehicleId ?? run.vehicles[0]?.id;
-    if (!vehicleId) return;
+    if (!targetVehicleId) return;
     setError(null);
-    try { await createFailure(runId, { vehicle_id: vehicleId, failure_type: failureType, duration_ms: failureDuration * 1000 }); }
-    catch (reason: unknown) { setError(reason instanceof Error ? reason.message : "Unable to inject failure"); }
+    try { await createFailure(runId, { vehicle_id: targetVehicleId, failure_type: failureType, duration_ms: failureDuration * 1000 }); }
+    catch (reason: unknown) { setError(reason instanceof Error ? reason.message : "Unable to inject simulated fault"); }
   };
-  return <main className="main"><div className="planner-heading"><div><div className="eyebrow">Live operations / {runId}</div><h1>Mission run</h1><div className="status" aria-label={`Run status ${run.status}`}>● {run.status} · {elapsedMs} ms</div></div><div className="actions compact">{run.status === "READY" && <button className="button primary" disabled={starting} onClick={() => command("start")}>{starting ? "Starting…" : "Start simulation"}</button>}{run.status === "RUNNING" && <><button className="button" disabled={starting} onClick={() => command("pause")}>Pause</button><button className="button" disabled={starting} onClick={() => command("stop")}>Stop</button></>}{run.status === "PAUSED" && <><button className="button primary" disabled={starting} onClick={() => command("resume")}>Resume</button><button className="button" disabled={starting} onClick={() => command("stop")}>Stop</button></>}</div></div>{error && <div className="notice error">{error}</div>}<OperationalDiagnostics metrics={metrics} metricsError={metricsError} connection={connection} duplicates={duplicates} missing={missing} outOfOrder={outOfOrder} /><div className="workspace"><aside className="rail"><div className="eyebrow">Fleet · {connection}</div><label className="field">Search fleet<input aria-label="Search fleet" value={fleetSearch} onChange={(event) => setFleetSearch(event.target.value)} placeholder="Callsign" /></label><div className="list">{visibleVehicles.map((vehicle) => { const telemetry = vehicles[vehicle.id]; return <button className={`list-item selectable ${selectedVehicleId === vehicle.id ? "selected" : ""}`} key={vehicle.id} onClick={() => selectVehicle(vehicle.id)}><strong>{vehicle.callsign}</strong><span>{telemetry?.missionState ?? run.status} · {telemetry?.communicationsState ?? "—"}</span></button>; })}</div><div className="metric"><span>Duplicates</span><strong>{duplicates}</strong></div><div className="metric"><span>Missing</span><strong>{missing}</strong></div><div className="metric"><span>Out of order</span><strong>{outOfOrder}</strong></div></aside><section className="map-shell"><LiveMap vehicles={vehicles} history={history} plannedRoutes={plannedRoutes} selectedVehicleId={selectedVehicleId} onSelect={selectVehicle} /><div className="map-hint">WebSocket · {connection}</div></section><aside className="inspector"><div className="eyebrow">Vehicle detail</div>{selected ? <><div className="metric"><span>State</span><strong>{selected.missionState}</strong></div><div className="metric"><span>Battery</span><strong>{selected.batteryPercent.toFixed(1)}%</strong></div><div className="metric"><span>Altitude</span><strong>{selected.altitudeM.toFixed(1)} m</strong></div><div className="metric"><span>Speed</span><strong>{selected.groundSpeedMps.toFixed(1)} m/s</strong></div><div className="metric"><span>GPS quality</span><strong>{selected.gpsQualityPercent.toFixed(0)}%</strong></div><div className="metric"><span>Sensor</span><strong>{selected.sensorStatus}</strong></div><div className="metric"><span>Sequence</span><strong>{selected.sequence}</strong></div></> : <p className="card-copy">Waiting for telemetry.</p>}<div className="failure-panel"><div className="eyebrow">Simulation controls</div><label className="field">Failure<select value={failureType} onChange={(event) => setFailureType(event.target.value as FailureType)}>{failureTypes.map((type) => <option key={type} value={type}>{type.replaceAll("_", " ")}</option>)}</select></label><label className="field">Duration (seconds)<input type="number" min={1} max={900} value={failureDuration} onChange={(event) => setFailureDuration(Number(event.target.value))} /></label><button className="button" disabled={run.status !== "RUNNING"} onClick={inject}>Inject failure</button></div><div className="eyebrow" style={{ marginTop: 28 }}>Live events</div><label className="field">Filter events<input aria-label="Filter live events" value={eventSearch} onChange={(event) => setEventSearch(event.target.value)} placeholder="Type or vehicle" /></label><label className="field">Severity<select aria-label="Event severity" value={eventSeverityFilter} onChange={(event) => setEventSeverityFilter(event.target.value as typeof eventSeverityFilter)}><option value="ALL">ALL</option><option value="CRITICAL">CRITICAL</option><option value="WARNING">WARNING</option><option value="INFO">INFO</option></select></label><button className="button" onClick={() => setWarningsFirst((value) => !value)}>{warningsFirst ? "Warnings first" : "Newest first"}</button><div className="events">{visibleEvents.slice(0, 40).map((event: LiveEvent) => <div className={`event ${event.severity.toLowerCase()}`} key={event.eventId}><strong>{event.type}</strong><span>{event.vehicleId ?? "SYSTEM"} · {event.simTimeMs} ms</span></div>)}</div></aside></div></main>;
+
+  if (!run) return <main className="main"><div className="surface loading-state" role="status">{error ?? "Loading run…"}</div></main>;
+
+  return (
+    <main className="main">
+      <PageHeader
+        breadcrumbs={[{ label: "Missions", href: "/missions" }, { label: mission?.name ?? "Mission run" }, { label: "Live operations" }]}
+        eyebrow={`Run ${run.id.slice(0, 8)} / live operations`}
+        title={mission?.name ?? "Mission run"}
+        description="Observe the active simulation. WebSocket telemetry is transient; durable metrics and replay are loaded from the system of record."
+        status={<div className="run-status-line"><StatusBadge label={run.status} tone={statusTone(run.status)} /><span className="elapsed">{elapsedMs} ms simulation time</span></div>}
+        actions={<div className="actions compact">{run.status === "READY" && <button className="button primary" type="button" disabled={starting} onClick={() => command("start")}><Play size={14} fill="currentColor" aria-hidden="true" /> {starting ? "Starting…" : "Start run"}</button>}{run.status === "RUNNING" && <><button className="button" type="button" disabled={starting} onClick={() => command("pause")}><Pause size={14} aria-hidden="true" /> Pause run</button><button className="button danger" type="button" disabled={starting} onClick={() => command("stop")}><Square size={13} aria-hidden="true" /> Stop run</button></>}{run.status === "PAUSED" && <><button className="button primary" type="button" disabled={starting} onClick={() => command("resume")}><Play size={14} fill="currentColor" aria-hidden="true" /> Resume run</button><button className="button danger" type="button" disabled={starting} onClick={() => command("stop")}><Square size={13} aria-hidden="true" /> Stop run</button></>}</div>}
+      />
+      {error && <div className="notice error" role="alert"><strong>Live operations notice.</strong> {error}</div>}
+      <RunNavigation runId={runId} active="live" />
+      <OperationalDiagnostics metrics={metrics} metricsError={metricsError} connection={connection} duplicates={duplicates} missing={missing} outOfOrder={outOfOrder} />
+
+      <div className="workspace">
+        <aside className="rail" aria-label="Fleet telemetry">
+          <header className="rail-header"><div><div className="eyebrow">Fleet telemetry</div><h2>Vehicles</h2><p className="rail-description">Select a vehicle to focus the map and detail panel.</p></div><span className="rail-count">{run.vehicles.length}</span></header>
+          <label className="field"><span>Search callsigns</span><span className="input-with-icon"><Search size={13} aria-hidden="true" /><input aria-label="Search fleet" value={fleetSearch} onChange={(event) => setFleetSearch(event.target.value)} placeholder="UAV-007" /></span></label>
+          {visibleVehicles.length === 0 ? <div className="list-empty">No vehicles match this search.</div> : <div className="list">{visibleVehicles.map((vehicle) => { const telemetry = vehicles[vehicle.id]; return <button className={`list-item selectable ${selectedVehicleId === vehicle.id ? "selected" : ""}`} type="button" key={vehicle.id} onClick={() => selectVehicle(vehicle.id)} aria-pressed={selectedVehicleId === vehicle.id}><strong>{vehicle.callsign}</strong><span>{telemetry?.missionState ?? run.status} · {telemetry?.communicationsState ?? "Awaiting telemetry"}</span></button>; })}</div>}
+          <div className="fleet-integrity"><div className="eyebrow">Browser integrity counters</div><div className="metric"><span>Missing sequences</span><strong>{missing}</strong></div><div className="metric"><span>Duplicates</span><strong>{duplicates}</strong></div><div className="metric"><span>Out of order</span><strong>{outOfOrder}</strong></div></div>
+        </aside>
+
+        <section className="map-stage" aria-label="Live mission map">
+          <LiveMap vehicles={vehicles} history={history} plannedRoutes={plannedRoutes} callsigns={callsigns} selectedVehicleId={selectedVehicleId} onSelect={selectVehicle} />
+          <div className="map-legend" aria-label="Map legend"><span className="legend-item"><span className="legend-mark point" /> Live vehicle</span><span className="legend-item"><span className="legend-mark" /> Telemetry trail</span><span className="legend-item"><span className="legend-mark trail" /> Planned route</span></div>
+          <div className="map-hint"><strong>Live mission map</strong><span><Radio size={12} aria-hidden="true" /> WebSocket {connection} · select a marker for detail</span></div>
+        </section>
+
+        <aside className="inspector" aria-label="Live run inspector">
+          <header className="inspector-header"><div><div className="eyebrow">Run inspector</div><h2>{selected ? callsigns[selected.vehicleId] ?? "Vehicle detail" : "Vehicle detail"}</h2><p className="inspector-description">Latest decoded telemetry for the focused vehicle.</p></div></header>
+          <VehicleDetail selected={selected} />
+          <FailureInjectionPanel run={run} selected={selected} failureType={failureType} failureDuration={failureDuration} failureVehicleId={failureVehicleId} busy={starting} onVehicleChange={setFailureVehicleId} onTypeChange={setFailureType} onDurationChange={setFailureDuration} onInject={inject} />
+          <EventTimeline events={visibleEvents} search={eventSearch} severity={eventSeverityFilter} warningsFirst={warningsFirst} onSearch={setEventSearch} onSeverity={setEventSeverityFilter} onSort={() => setWarningsFirst((value) => !value)} />
+        </aside>
+      </div>
+    </main>
+  );
 }

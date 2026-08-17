@@ -1,7 +1,7 @@
 # Sentinel Frontend and UI Specification
 
-Status: Phase 14 implementation baseline
-Date: 2026-08-12
+Status: Phase 18 implementation baseline
+Date: 2026-08-17
 
 ## Product feel
 
@@ -9,6 +9,10 @@ Sentinel should feel like professional mission-operations software: map-dominant
 information-dense, restrained, legible, and explicit about system status. Avoid neon
 hacker styling, game-like HUDs, excessive animation, and military movie aesthetics.
 Dark mode is acceptable but must preserve contrast and hierarchy.
+
+The implementation map and action/persistence definitions live in
+[`docs/WEB_APP_GUIDE.md`](WEB_APP_GUIDE.md). This specification describes the visual
+and interaction rules that the implementation must preserve.
 
 ## Routes
 
@@ -21,17 +25,17 @@ Dark mode is acceptable but must preserve contrast and hierarchy.
 | `/runs/[id]/replay` | Historical replay |
 | `/runs/[id]/debrief` | Metrics and AI analysis |
 
-The landing page exposes a primary **Launch seeded demo** action. It starts or
-reconnects to the canonical Angeles Forest Survey run and routes directly to live
-operations; launch errors remain visible inline without losing the landing context.
+The landing page exposes one primary **Launch seeded demo** action and one secondary
+**Open mission catalog** action. The global shell keeps Overview and Missions available
+on every screen. Launch errors remain visible inline without losing landing context.
 
 ## Mission planner
 
-The planner has a fleet sidebar, central MapLibre map, mission-configuration panel,
-and waypoint/route area. Users can create a mission, add/select UAVs, click to add
-waypoints, drag to reposition them, edit/delete/reorder route points, configure
-altitude/speed/return-battery/network profile, save, reload, and recover identical
-configuration.
+The planner has a fleet roster, central MapLibre map, readiness gate, mission-settings
+panel, and waypoint editor. Users can create a mission, add/select UAVs, click to add
+waypoints, drag to reposition them, edit/delete route points, configure the implemented
+waypoint fields, save explicitly, reload, and recover identical configuration.
+Unimplemented configuration fields are not represented as fake controls.
 
 The map renders home/base positions, vehicle positions, waypoint markers, editable
 route polylines, and later survey regions. The live map adds planned routes and bounded
@@ -48,13 +52,13 @@ boundary so readiness is not confused with vehicle control authorization.
 The flagship live view contains:
 
 - mission title, run status, and elapsed simulation time;
-- fleet sidebar with callsign, mission state, communications state, battery, search,
-  sorting, filtering, and warnings-first view;
+  - fleet roster with callsign, mission state, communications state, search, and
+  selection focus;
 - map with smooth vehicle markers, heading rotation, planned routes, completed trails,
   and selected/hovered callsigns;
 - vehicle details panel with state, waypoint progress, elapsed time, flight, power,
   communications, latest sequence, missing, duplicate, and out-of-order counts;
-- live event timeline with severity, vehicle, type, and time filters;
+  - live event timeline with severity and text filters plus explicit sort mode;
 - connection indicator with `LIVE`, `RECONNECTING`, or `DISCONNECTED` text.
 - operational diagnostics showing persisted telemetry count, measured telemetry rate,
   p95 delivery latency, communications availability, browser sequence counters, and
@@ -65,10 +69,11 @@ visual smoothing must not rewrite factual telemetry values.
 
 ## Failure injection panel
 
-Visible only for simulation controls. It allows selecting a run vehicle, latency,
-packet loss, jitter, permitted failure type, and duration, then submitting an
-injection. Options are restricted to the safe taxonomy in the API specification.
-Every injection must be auditable in the event timeline.
+Visible only for simulation controls. It allows selecting a run vehicle, permitted
+failure type, and duration, then submitting an injection. Options are restricted to the
+safe taxonomy in the API specification. Every injection must be auditable in the event
+timeline. The UI labels this as a simulated fault and explicitly states that it has no
+physical-control authority.
 
 ## Replay
 

@@ -1,6 +1,9 @@
 "use client";
 
 import { useEffect, useState } from "react";
+import { RefreshCw } from "lucide-react";
+
+import { StatusBadge, statusTone } from "@/components/status-badge";
 
 type Health = { status: string; service: string; dependencies: Record<string, string> };
 
@@ -23,15 +26,18 @@ export function HealthCard() {
     return () => { active = false; controller.abort(); clearTimeout(timer); };
   }, [attempt]);
 
-  const ready = health?.status === "ok";
   return (
-    <div className="card">
-      <div className="eyebrow">Service status</div>
-      <p className="status" style={{ color: ready ? "var(--accent)" : "var(--warning)", marginTop: 14 }}>
-        <span className="status-dot" /> {health?.status === "unavailable" ? "starting service…" : health?.status ?? "checking"}
-      </p>
-      <div className="metric"><span>PostgreSQL</span><strong>{health?.dependencies.postgres ?? "—"}</strong></div>
-      <div className="metric"><span>Redis / Valkey</span><strong>{health?.dependencies.redis ?? "—"}</strong></div>
+    <div className="card" aria-label="Runtime dependencies">
+      <div className="section-heading">
+        <div><div className="eyebrow">Runtime dependencies</div><h2>Service status</h2></div>
+        <StatusBadge label={health?.status === "unavailable" ? "Unavailable" : health?.status === "ok" ? "Healthy" : "Checking"} tone={statusTone(health?.status === "unavailable" ? "DISCONNECTED" : health?.status === "ok" ? "HEALTHY" : "STALE")} />
+      </div>
+      <p className="card-copy">The API reports whether PostgreSQL and Redis/Valkey are available before a mission is launched.</p>
+      <div className="metric"><span>PostgreSQL</span><strong>{health?.dependencies.postgres ?? "Checking"}</strong></div>
+      <div className="metric"><span>Redis / Valkey</span><strong>{health?.dependencies.redis ?? "Checking"}</strong></div>
+      <button className="button" type="button" onClick={() => setAttempt((value) => value + 1)} title="Run the dependency health check again">
+        <RefreshCw size={13} aria-hidden="true" /> Check again
+      </button>
     </div>
   );
 }

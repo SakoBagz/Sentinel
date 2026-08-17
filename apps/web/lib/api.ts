@@ -71,10 +71,15 @@ export const runSchema = z.object({
 export type Run = z.infer<typeof runSchema>;
 
 async function request<T>(path: string, init?: RequestInit, schema?: z.ZodType<T>): Promise<T> {
-  const response = await fetch(`${apiBase}${path}`, {
-    ...init,
-    headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-  });
+  let response: Response;
+  try {
+    response = await fetch(`${apiBase}${path}`, {
+      ...init,
+      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+    });
+  } catch {
+    throw new Error(`Sentinel API is unavailable at ${apiBase}. Start the local services and try again.`);
+  }
   if (!response.ok) {
     const body = await response.text();
     let message = body || `Request failed with ${response.status}`;

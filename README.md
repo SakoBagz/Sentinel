@@ -20,6 +20,9 @@ For a recruiter-facing walkthrough, see [`docs/ENGINEERING_SHOWCASE.md`](docs/EN
 It explains the one-minute demo path, the engineering proof points to inspect, and
 resume language that keeps benchmark claims honest.
 
+For the web application's screen ownership, action effects, persistence rules, status
+vocabulary, and component boundaries, see [`docs/WEB_APP_GUIDE.md`](docs/WEB_APP_GUIDE.md).
+
 ## Local development
 
 Requirements: Docker, Python 3.11+ (3.12+ recommended), Node.js 22.x, and npm.

@@ -1,37 +1,78 @@
 import Link from "next/link";
+import { ArrowUpRight, Database, Map, Radio, ShieldCheck } from "lucide-react";
 
+import { OverviewField } from "@/components/overview-field";
 import { HealthCard } from "@/components/health-card";
 import { DemoLaunchButton } from "@/components/demo-launch-button";
+import { StatusBadge } from "@/components/status-badge";
 
 export default function HomePage() {
   return (
-    <>
-      <header className="topbar">
-        <div className="brand">SENTINEL</div>
-        <div className="eyebrow">Mission operations / simulation</div>
-      </header>
-      <main className="main">
+    <main className="main home-main">
+      <div className="home-hero-layout">
         <section className="hero">
-          <div className="eyebrow">Portfolio engineering platform</div>
-          <h1>Coordinate the mission. Understand the system.</h1>
+          <div className="eyebrow">Portfolio engineering platform / 01</div>
+          <h1>Mission operations, made inspectable.</h1>
           <p>
-            Sentinel simulates benign UAV operations through deterministic movement,
-            unreliable communications, durable telemetry, replay, and evidence-grounded
-            mission analysis.
+            Sentinel is a benign UAV operations simulator built to make distributed-systems
+            behavior visible: deterministic movement, unreliable communications, durable
+            telemetry, replay, and evidence-grounded analysis.
           </p>
-          <div className="actions">
-            <DemoLaunchButton />
-            <Link className="button primary" href="/missions">Open mission control</Link>
-            <Link className="button" href="/missions">Browse missions</Link>
+          <div className="hero-actions">
+            <div className="hero-action-block">
+              <DemoLaunchButton />
+              <span className="action-help">Creates the seeded Angeles Forest run and opens its live operations view.</span>
+            </div>
+            <div className="hero-action-block">
+              <Link className="button" href="/missions"><Map size={14} aria-hidden="true" />Open mission catalog</Link>
+              <span className="action-help">Inspect mission definitions, routes, and readiness before a run.</span>
+            </div>
+          </div>
+          <div className="home-context">
+            <StatusBadge label="Portfolio build" tone="positive" />
+            <span><strong>Data path:</strong> simulator → Redis Streams → PostgreSQL → replay</span>
           </div>
         </section>
-        <section className="grid">
-          <HealthCard />
-          <div className="card"><div className="eyebrow">Mode</div><h2 style={{ marginTop: 14 }}>Operational baseline</h2><p>Planner, deterministic simulation, realtime telemetry, replay, metrics, and read-only analysis are wired for local and demo environments.</p></div>
-          <div className="card"><div className="eyebrow">Safety boundary</div><h2 style={{ marginTop: 14 }}>Read-only analysis</h2><p>The Mission Analyst explains simulated operations; it cannot control vehicles or modify mission state.</p></div>
-        </section>
-        <div className="notice">Public Portfolio Demo Mode will intentionally limit cloud simulation capacity. Benchmark results are measured locally and disclosed with hardware details.</div>
-      </main>
-    </>
+        <OverviewField />
+      </div>
+
+      <section className="workflow-section" aria-labelledby="workflow-heading">
+        <div className="section-heading">
+          <div><div className="eyebrow">Operating loop</div><h2 id="workflow-heading">Every screen has one job.</h2></div>
+          <span className="section-aside">Configure → observe → explain</span>
+        </div>
+        <div className="workflow-grid">
+          <Link className="workflow-step" href="/missions">
+            <span className="workflow-index">01 / DEFINE</span>
+            <h2>Plan the mission <ArrowUpRight size={15} aria-hidden="true" /></h2>
+            <p>Assemble the fleet, place route points, and resolve preflight blockers before the run can start.</p>
+            <span className="workflow-link">Open mission catalog</span>
+          </Link>
+          <div className="workflow-step">
+            <span className="workflow-index">02 / OPERATE</span>
+            <h2>Observe the system <Radio size={15} aria-hidden="true" /></h2>
+            <p>Follow live telemetry, connection health, persisted metrics, event severity, and simulated faults.</p>
+            <span className="workflow-link">Available from a run</span>
+          </div>
+          <div className="workflow-step">
+            <span className="workflow-index">03 / REVIEW</span>
+            <h2>Replay the evidence <Database size={15} aria-hidden="true" /></h2>
+            <p>Use durable telemetry and events to inspect what happened without rerunning the simulator.</p>
+            <span className="workflow-link">Available after launch</span>
+          </div>
+        </div>
+      </section>
+
+      <section className="home-system-grid" aria-label="Runtime and safety definitions">
+        <HealthCard />
+        <div className="card">
+          <div className="eyebrow">Safety boundary</div>
+          <h2>Analysis without authority</h2>
+          <p>The Mission Analyst can summarize simulated data and link to supporting events. It cannot modify missions, command vehicles, target people, or control payloads.</p>
+          <div className="home-context"><ShieldCheck size={15} aria-hidden="true" /><span>Read-only analysis / simulation-only operations</span></div>
+        </div>
+      </section>
+      <div className="notice portfolio-note"><strong>Demo mode:</strong> public capacity is intentionally bounded. Benchmark claims belong to the local harness and should disclose vehicle count, telemetry rate, duration, and hardware.</div>
+    </main>
   );
 }

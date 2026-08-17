@@ -1,5 +1,6 @@
 export type MissionReadinessInput = {
   name: string;
+  nameSaved: boolean;
   vehicleCount: number;
   routedVehicleCount: number;
   hasSharedRoute: boolean;
@@ -7,7 +8,7 @@ export type MissionReadinessInput = {
 };
 
 export type MissionReadinessCheck = {
-  id: "identity" | "fleet" | "routes" | "map";
+  id: "identity" | "saved" | "fleet" | "routes" | "map";
   label: string;
   detail: string;
   ready: boolean;
@@ -29,6 +30,12 @@ export function evaluateMissionReadiness(input: MissionReadinessInput): MissionR
       label: "Mission identity",
       detail: hasName ? "Named operation" : "Add a mission name",
       ready: hasName,
+    },
+    {
+      id: "saved",
+      label: "Configuration saved",
+      detail: input.nameSaved ? "Latest mission changes are persisted" : "Save pending mission changes before launch",
+      ready: input.nameSaved,
     },
     {
       id: "fleet",

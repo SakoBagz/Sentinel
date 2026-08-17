@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { Play } from "lucide-react";
 
 import { launchDemo } from "@/lib/api";
 
@@ -24,9 +25,10 @@ export function DemoLaunchButton() {
   };
 
   return (
-    <div>
-      <button className="button primary" onClick={launch} disabled={busy}>
-        {busy ? "Starting seeded demo…" : "Launch seeded demo"}
+    <div className="hero-action-block">
+      <button className="button primary" onClick={launch} disabled={busy} aria-busy={busy}>
+        <Play size={14} fill="currentColor" aria-hidden="true" />
+        {busy ? "Creating seeded run…" : "Launch seeded demo"}
       </button>
       {error && <p className="notice error" role="alert">{error}</p>}
     </div>
