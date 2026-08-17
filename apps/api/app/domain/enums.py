@@ -10,6 +10,16 @@ class MissionStatus(StrEnum):
     ABORTED = "ABORTED"
 
 
+class MissionScenario(StrEnum):
+    SEARCH_AND_RESCUE = "search_and_rescue"
+    WILDFIRE_MONITORING = "wildfire_monitoring"
+    ENVIRONMENTAL_SURVEY = "environmental_survey"
+    INFRASTRUCTURE_INSPECTION = "infrastructure_inspection"
+    MAPPING = "mapping"
+    COMMUNICATIONS_RELAY = "communications_relay"
+    ANGELES_FOREST_SURVEY = "angeles_forest_survey"
+
+
 class RunStatus(StrEnum):
     READY = "READY"
     RUNNING = "RUNNING"
@@ -88,4 +98,3 @@ class FailureType(StrEnum):
     BATTERY_ANOMALY = "BATTERY_ANOMALY"
     SENSOR_UNAVAILABLE = "SENSOR_UNAVAILABLE"
     SERVICE_DELAY = "SERVICE_DELAY"
-

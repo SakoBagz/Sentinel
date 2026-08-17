@@ -138,6 +138,13 @@ demo run and recent public runs, delete older telemetry-heavy runs, and retain
 aggregate benchmark summaries. No development data is deleted automatically unless an
 explicit setting enables it.
 
+For a deliberate local reset, run `make reset-local`. The command is confirmation-gated,
+clears the application tables and Redis stream database, and seeds mission definitions
+without creating a run. Use `PYTHONPATH=apps/api python3 scripts/reset_local_data.py
+--confirm --empty` when an empty catalog is needed for UI testing. This utility is for
+the local development environment only; it does not rewrite Git history or target a
+deployed database.
+
 ## Migrations
 
 Alembic owns reviewed schema migrations. The initial migration establishes the

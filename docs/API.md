@@ -51,6 +51,11 @@ vehicles, waypoints, and network profile references as defined by the domain mod
 Mutation is rejected once an active run has started unless the field is explicitly
 versioned as a new mission revision.
 
+Supported scenario types are `search_and_rescue`, `wildfire_monitoring`,
+`environmental_survey`, `infrastructure_inspection`, `mapping`,
+`communications_relay`, and `angeles_forest_survey`. The backend rejects arbitrary
+scenario strings so catalog filtering and downstream analytics share one vocabulary.
+
 ## Seeded demo endpoint
 
 ### `POST /api/demo/launch`

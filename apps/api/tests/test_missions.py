@@ -1,6 +1,25 @@
 from uuid import UUID
 
 
+def test_mission_metadata_is_normalized_and_scenario_is_controlled(client) -> None:
+    created = client.post(
+        "/api/missions",
+        json={
+            "name": "  North ridge survey  ",
+            "description": "  A bounded inspection route.  ",
+            "scenario_type": "mapping",
+        },
+    )
+    assert created.status_code == 201
+    assert created.json()["name"] == "North ridge survey"
+    assert created.json()["description"] == "A bounded inspection route."
+
+    assert client.post("/api/missions", json={"name": "   "}).status_code == 422
+    assert client.post(
+        "/api/missions", json={"name": "Unsupported", "scenario_type": "custom"}
+    ).status_code == 422
+
+
 def test_mission_vehicle_waypoint_golden_path(client) -> None:
     created = client.post(
         "/api/missions",

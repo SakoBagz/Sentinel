@@ -1,4 +1,4 @@
-.PHONY: dev infra api web test test-api test-web lint typecheck build benchmark
+.PHONY: dev infra api web test test-api test-web lint typecheck build benchmark reset-local
 
 infra:
 	docker compose up -d postgres redis
@@ -32,3 +32,6 @@ build:
 
 benchmark:
 	PYTHONPATH=apps/api:simulator python3 scripts/benchmark.py --help
+
+reset-local:
+	PYTHONPATH=apps/api python3 scripts/reset_local_data.py --confirm

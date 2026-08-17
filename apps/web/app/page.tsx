@@ -2,7 +2,6 @@ import Link from "next/link";
 import { ArrowUpRight, Database, Map, Radio, ShieldCheck } from "lucide-react";
 
 import { OverviewField } from "@/components/overview-field";
-import { HealthCard } from "@/components/health-card";
 import { DemoLaunchButton } from "@/components/demo-launch-button";
 import { StatusBadge } from "@/components/status-badge";
 
@@ -12,7 +11,7 @@ export default function HomePage() {
       <div className="home-hero-layout">
         <section className="hero">
           <div className="eyebrow">Mission control / overview</div>
-          <h1>Mission operations, made inspectable.</h1>
+          <h1>Plan and analyze simulated UAV operations.</h1>
           <p>
             Sentinel is a benign UAV operations simulator built to make distributed-systems
             behavior visible: deterministic movement, unreliable communications, durable
@@ -63,14 +62,11 @@ export default function HomePage() {
         </div>
       </section>
 
-      <section className="home-system-grid" aria-label="Runtime and safety definitions">
-        <HealthCard />
-        <div className="card">
+      <section className="card home-safety-card" aria-label="Safety boundary">
           <div className="eyebrow">Safety boundary</div>
           <h2>Analysis without authority</h2>
           <p>The Mission Analyst can summarize simulated data and link to supporting events. It cannot modify missions, command vehicles, target people, or control payloads.</p>
           <div className="home-context"><ShieldCheck size={15} aria-hidden="true" /><span>Read-only analysis / simulation-only operations</span></div>
-        </div>
       </section>
     </main>
   );

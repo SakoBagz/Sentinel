@@ -10,6 +10,7 @@ import { useRouter } from "next/navigation";
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge, statusTone } from "@/components/status-badge";
 import { addVehicle, addWaypoint, createRun, deleteWaypoint, getMission, Mission, updateMission, updateWaypoint, Waypoint } from "@/lib/api";
+import { scenarioLabel } from "@/lib/mission-catalog";
 import { evaluateMissionReadiness } from "@/lib/mission-readiness";
 
 type Props = { missionId: string };
@@ -345,9 +346,11 @@ export function MissionPlanner({ missionId }: Props) {
           <section className="inspector-section mission-settings">
             <label className="field">Mission name<input value={name} onChange={(event) => setName(event.target.value)} aria-describedby="mission-name-help" /></label>
             <p id="mission-name-help" className="field-help">Names identify this reusable definition in the mission catalog.</p>
+            <div className="metric"><span>Operation</span><strong>{scenarioLabel(mission.scenario_type)}</strong></div>
             <div className="metric"><span>Lifecycle</span><strong>{mission.status}</strong></div>
             <div className="metric"><span>Assigned UAVs</span><strong>{mission.vehicles.length}</strong></div>
             <div className="metric"><span>Route points</span><strong>{mission.waypoints.length}</strong></div>
+            <div className="mission-objective"><div className="eyebrow">Objective</div><p>{mission.description ?? "No objective recorded. Add one from the mission catalog when creating a definition."}</p></div>
             <div className="settings-actions"><button className="button" type="button" disabled={busy || !nameDirty} onClick={saveMission}><Save size={13} aria-hidden="true" /> Save name</button><span className="save-state">{nameDirty ? "Unsaved name" : "Name saved"}</span></div>
           </section>
 

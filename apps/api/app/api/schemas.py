@@ -5,23 +5,50 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
-from app.domain.enums import FailureType, MissionStatus, RunStatus, WaypointAction
+from app.domain.enums import FailureType, MissionScenario, MissionStatus, RunStatus, WaypointAction
 
 
 class APIModel(BaseModel):
     model_config = ConfigDict(from_attributes=True, use_enum_values=True)
 
 
+def _clean_mission_name(value: str) -> str:
+    cleaned = value.strip()
+    if not cleaned:
+        raise ValueError("name must contain at least one non-whitespace character")
+    return cleaned
+
+
 class MissionCreate(APIModel):
     name: str = Field(min_length=1, max_length=200)
-    description: str | None = None
-    scenario_type: str | None = Field(default=None, max_length=100)
+    description: str | None = Field(default=None, max_length=2_000)
+    scenario_type: MissionScenario | None = None
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str) -> str:
+        return _clean_mission_name(value)
+
+    @field_validator("description")
+    @classmethod
+    def normalize_description(cls, value: str | None) -> str | None:
+        return value.strip() or None if value is not None else None
 
 
 class MissionUpdate(APIModel):
     name: str | None = Field(default=None, min_length=1, max_length=200)
-    description: str | None = None
-    scenario_type: str | None = Field(default=None, max_length=100)
+    description: str | None = Field(default=None, max_length=2_000)
+    scenario_type: MissionScenario | None = None
+
+    @field_validator("name")
+    @classmethod
+    def normalize_name(cls, value: str | None) -> str | None:
+        return _clean_mission_name(value) if value is not None else None
+
+    @field_validator("description")
+    @classmethod
+    def normalize_description(cls, value: str | None) -> str | None:
+        return value.strip() or None if value is not None else None
 
 
 class VehicleCreate(APIModel):
@@ -99,7 +126,7 @@ class MissionRead(APIModel):
     id: UUID
     name: str
     description: str | None
-    scenario_type: str | None
+    scenario_type: MissionScenario | None
     status: MissionStatus
     created_at: datetime
     updated_at: datetime

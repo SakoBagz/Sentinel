@@ -1,5 +1,7 @@
 import { z } from "zod";
 
+import type { MissionScenario } from "@/lib/mission-catalog";
+
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
 const vehicleSchema = z.object({
@@ -124,11 +126,11 @@ export async function getMission(id: string): Promise<Mission> {
   return request(`/api/missions/${id}`, undefined, missionSchema);
 }
 
-export async function createMission(input: { name: string; description?: string; scenario_type?: string }): Promise<Mission> {
+export async function createMission(input: { name: string; description?: string; scenario_type?: MissionScenario }): Promise<Mission> {
   return request("/api/missions", { method: "POST", body: JSON.stringify(input) }, missionSchema);
 }
 
-export async function updateMission(id: string, input: { name?: string; description?: string; scenario_type?: string }): Promise<Mission> {
+export async function updateMission(id: string, input: { name?: string; description?: string; scenario_type?: MissionScenario }): Promise<Mission> {
   return request(`/api/missions/${id}`, { method: "PATCH", body: JSON.stringify(input) }, missionSchema);
 }
 
