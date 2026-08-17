@@ -6,7 +6,7 @@ import * as maplibregl from "maplibre-gl";
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 
-import { createFailure, failureTypes, getMission, getRun, getRunSnapshot, Mission, pauseRun, resumeRun, Run, startRun, stopRun, FailureType } from "@/lib/api";
+import { createFailure, failureTypes, getMetrics, getMission, getRun, getRunSnapshot, Mission, pauseRun, resumeRun, Run, RunMetrics, startRun, stopRun, FailureType } from "@/lib/api";
 import { LiveEvent, MissionState, VehicleTelemetry, useLiveTelemetry } from "@/stores/live-telemetry";
 
 const envelopeSchema = z.object({
@@ -140,8 +140,38 @@ function telemetryFromSnapshot(value: NonNullable<Awaited<ReturnType<typeof getR
   };
 }
 
+function OperationalDiagnostics({
+  metrics,
+  metricsError,
+  connection,
+  duplicates,
+  missing,
+  outOfOrder,
+}: {
+  metrics: RunMetrics | null;
+  metricsError: string | null;
+  connection: string;
+  duplicates: number;
+  missing: number;
+  outOfOrder: number;
+}) {
+  return <section className="card diagnostics-card" aria-label="Operational diagnostics">
+    <div className="diagnostics-header"><div><div className="eyebrow">Operational diagnostics</div><h2>Control-plane health</h2></div><span className={`diagnostics-badge ${metrics ? "ready" : "warning"}`}><span className="status-dot" />{metrics ? "Durable metrics" : "Awaiting persistence"}</span></div>
+    <div className="diagnostic-grid">
+      <div className="metric"><span>Persisted telemetry</span><strong>{metrics?.telemetry_messages_received.toLocaleString() ?? "—"}</strong></div>
+      <div className="metric"><span>Telemetry rate</span><strong>{metrics ? `${metrics.telemetry_throughput_per_second.toFixed(1)} msg/s` : "—"}</strong></div>
+      <div className="metric"><span>p95 delivery latency</span><strong>{metrics ? `${metrics.latency_p95_ms.toFixed(1)} ms` : "—"}</strong></div>
+      <div className="metric"><span>Comms availability</span><strong>{metrics ? `${metrics.communications_availability_percent.toFixed(1)}%` : "—"}</strong></div>
+    </div>
+    <div className="diagnostic-foot"><span>WebSocket <strong>{connection}</strong></span><span>Browser gaps <strong>{missing}</strong></span><span>Duplicates <strong>{duplicates}</strong></span><span>Out of order <strong>{outOfOrder}</strong></span></div>
+    {metricsError && <div className="notice">Durable metrics are temporarily unavailable; the live telemetry stream remains active.</div>}
+  </section>;
+}
+
 export function LiveOperations({ runId }: { runId: string }) {
   const [run, setRun] = useState<Run | null>(null);
+  const [metrics, setMetrics] = useState<RunMetrics | null>(null);
+  const [metricsError, setMetricsError] = useState<string | null>(null);
   const [plannedRoutes, setPlannedRoutes] = useState<Record<string, [number, number][]>>({});
   const [error, setError] = useState<string | null>(null);
   const [starting, setStarting] = useState(false);
@@ -152,6 +182,7 @@ export function LiveOperations({ runId }: { runId: string }) {
   const [eventSearch, setEventSearch] = useState("");
   const [warningsFirst, setWarningsFirst] = useState(true);
   const { vehicles, history, events, connection, selectedVehicleId, duplicates, missing, outOfOrder, setConnection, selectVehicle, ingestTelemetry, hydrateTelemetry, ingestEvent, reset } = useLiveTelemetry();
+  const metricsLive = run?.status === "READY" || run?.status === "RUNNING" || run?.status === "PAUSED";
   useEffect(() => {
     reset();
     getRun(runId).then(async (loadedRun) => {
@@ -171,6 +202,25 @@ export function LiveOperations({ runId }: { runId: string }) {
     }).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Unable to load run"));
     return reset;
   }, [runId, reset]);
+  useEffect(() => {
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refresh = async () => {
+      try {
+        const value = await getMetrics(runId);
+        if (active) {
+          setMetrics(value);
+          setMetricsError(null);
+        }
+      } catch (reason: unknown) {
+        if (active) setMetricsError(reason instanceof Error ? reason.message : "Unable to load durable metrics");
+      } finally {
+        if (active && metricsLive) timer = setTimeout(refresh, 5_000);
+      }
+    };
+    void refresh();
+    return () => { active = false; if (timer) clearTimeout(timer); };
+  }, [runId, metricsLive]);
   useEffect(() => {
     const wsBase = process.env.NEXT_PUBLIC_WS_BASE_URL ?? "ws://localhost:8000";
     let socket: WebSocket | null = null;
@@ -270,5 +320,5 @@ export function LiveOperations({ runId }: { runId: string }) {
     try { await createFailure(runId, { vehicle_id: vehicleId, failure_type: failureType, duration_ms: failureDuration * 1000 }); }
     catch (reason: unknown) { setError(reason instanceof Error ? reason.message : "Unable to inject failure"); }
   };
-  return <main className="main"><div className="planner-heading"><div><div className="eyebrow">Live operations / {runId}</div><h1>Mission run</h1><div className="status" aria-label={`Run status ${run.status}`}>● {run.status} · {elapsedMs} ms</div></div><div className="actions compact">{run.status === "READY" && <button className="button primary" disabled={starting} onClick={() => command("start")}>{starting ? "Starting…" : "Start simulation"}</button>}{run.status === "RUNNING" && <><button className="button" disabled={starting} onClick={() => command("pause")}>Pause</button><button className="button" disabled={starting} onClick={() => command("stop")}>Stop</button></>}{run.status === "PAUSED" && <><button className="button primary" disabled={starting} onClick={() => command("resume")}>Resume</button><button className="button" disabled={starting} onClick={() => command("stop")}>Stop</button></>}</div></div>{error && <div className="notice error">{error}</div>}<div className="workspace"><aside className="rail"><div className="eyebrow">Fleet · {connection}</div><label className="field">Search fleet<input aria-label="Search fleet" value={fleetSearch} onChange={(event) => setFleetSearch(event.target.value)} placeholder="Callsign" /></label><div className="list">{visibleVehicles.map((vehicle) => { const telemetry = vehicles[vehicle.id]; return <button className={`list-item selectable ${selectedVehicleId === vehicle.id ? "selected" : ""}`} key={vehicle.id} onClick={() => selectVehicle(vehicle.id)}><strong>{vehicle.callsign}</strong><span>{telemetry?.missionState ?? run.status} · {telemetry?.communicationsState ?? "—"}</span></button>; })}</div><div className="metric"><span>Duplicates</span><strong>{duplicates}</strong></div><div className="metric"><span>Missing</span><strong>{missing}</strong></div><div className="metric"><span>Out of order</span><strong>{outOfOrder}</strong></div></aside><section className="map-shell"><LiveMap vehicles={vehicles} history={history} plannedRoutes={plannedRoutes} selectedVehicleId={selectedVehicleId} onSelect={selectVehicle} /><div className="map-hint">WebSocket · {connection}</div></section><aside className="inspector"><div className="eyebrow">Vehicle detail</div>{selected ? <><div className="metric"><span>State</span><strong>{selected.missionState}</strong></div><div className="metric"><span>Battery</span><strong>{selected.batteryPercent.toFixed(1)}%</strong></div><div className="metric"><span>Altitude</span><strong>{selected.altitudeM.toFixed(1)} m</strong></div><div className="metric"><span>Speed</span><strong>{selected.groundSpeedMps.toFixed(1)} m/s</strong></div><div className="metric"><span>GPS quality</span><strong>{selected.gpsQualityPercent.toFixed(0)}%</strong></div><div className="metric"><span>Sensor</span><strong>{selected.sensorStatus}</strong></div><div className="metric"><span>Sequence</span><strong>{selected.sequence}</strong></div></> : <p className="card-copy">Waiting for telemetry.</p>}<div className="failure-panel"><div className="eyebrow">Simulation controls</div><label className="field">Failure<select value={failureType} onChange={(event) => setFailureType(event.target.value as FailureType)}>{failureTypes.map((type) => <option key={type} value={type}>{type.replaceAll("_", " ")}</option>)}</select></label><label className="field">Duration (seconds)<input type="number" min={1} max={900} value={failureDuration} onChange={(event) => setFailureDuration(Number(event.target.value))} /></label><button className="button" disabled={run.status !== "RUNNING"} onClick={inject}>Inject failure</button></div><div className="eyebrow" style={{ marginTop: 28 }}>Live events</div><label className="field">Filter events<input aria-label="Filter live events" value={eventSearch} onChange={(event) => setEventSearch(event.target.value)} placeholder="Type or vehicle" /></label><label className="field">Severity<select aria-label="Event severity" value={eventSeverityFilter} onChange={(event) => setEventSeverityFilter(event.target.value as typeof eventSeverityFilter)}><option value="ALL">ALL</option><option value="CRITICAL">CRITICAL</option><option value="WARNING">WARNING</option><option value="INFO">INFO</option></select></label><button className="button" onClick={() => setWarningsFirst((value) => !value)}>{warningsFirst ? "Warnings first" : "Newest first"}</button><div className="events">{visibleEvents.slice(0, 40).map((event: LiveEvent) => <div className={`event ${event.severity.toLowerCase()}`} key={event.eventId}><strong>{event.type}</strong><span>{event.vehicleId ?? "SYSTEM"} · {event.simTimeMs} ms</span></div>)}</div></aside></div></main>;
+  return <main className="main"><div className="planner-heading"><div><div className="eyebrow">Live operations / {runId}</div><h1>Mission run</h1><div className="status" aria-label={`Run status ${run.status}`}>● {run.status} · {elapsedMs} ms</div></div><div className="actions compact">{run.status === "READY" && <button className="button primary" disabled={starting} onClick={() => command("start")}>{starting ? "Starting…" : "Start simulation"}</button>}{run.status === "RUNNING" && <><button className="button" disabled={starting} onClick={() => command("pause")}>Pause</button><button className="button" disabled={starting} onClick={() => command("stop")}>Stop</button></>}{run.status === "PAUSED" && <><button className="button primary" disabled={starting} onClick={() => command("resume")}>Resume</button><button className="button" disabled={starting} onClick={() => command("stop")}>Stop</button></>}</div></div>{error && <div className="notice error">{error}</div>}<OperationalDiagnostics metrics={metrics} metricsError={metricsError} connection={connection} duplicates={duplicates} missing={missing} outOfOrder={outOfOrder} /><div className="workspace"><aside className="rail"><div className="eyebrow">Fleet · {connection}</div><label className="field">Search fleet<input aria-label="Search fleet" value={fleetSearch} onChange={(event) => setFleetSearch(event.target.value)} placeholder="Callsign" /></label><div className="list">{visibleVehicles.map((vehicle) => { const telemetry = vehicles[vehicle.id]; return <button className={`list-item selectable ${selectedVehicleId === vehicle.id ? "selected" : ""}`} key={vehicle.id} onClick={() => selectVehicle(vehicle.id)}><strong>{vehicle.callsign}</strong><span>{telemetry?.missionState ?? run.status} · {telemetry?.communicationsState ?? "—"}</span></button>; })}</div><div className="metric"><span>Duplicates</span><strong>{duplicates}</strong></div><div className="metric"><span>Missing</span><strong>{missing}</strong></div><div className="metric"><span>Out of order</span><strong>{outOfOrder}</strong></div></aside><section className="map-shell"><LiveMap vehicles={vehicles} history={history} plannedRoutes={plannedRoutes} selectedVehicleId={selectedVehicleId} onSelect={selectVehicle} /><div className="map-hint">WebSocket · {connection}</div></section><aside className="inspector"><div className="eyebrow">Vehicle detail</div>{selected ? <><div className="metric"><span>State</span><strong>{selected.missionState}</strong></div><div className="metric"><span>Battery</span><strong>{selected.batteryPercent.toFixed(1)}%</strong></div><div className="metric"><span>Altitude</span><strong>{selected.altitudeM.toFixed(1)} m</strong></div><div className="metric"><span>Speed</span><strong>{selected.groundSpeedMps.toFixed(1)} m/s</strong></div><div className="metric"><span>GPS quality</span><strong>{selected.gpsQualityPercent.toFixed(0)}%</strong></div><div className="metric"><span>Sensor</span><strong>{selected.sensorStatus}</strong></div><div className="metric"><span>Sequence</span><strong>{selected.sequence}</strong></div></> : <p className="card-copy">Waiting for telemetry.</p>}<div className="failure-panel"><div className="eyebrow">Simulation controls</div><label className="field">Failure<select value={failureType} onChange={(event) => setFailureType(event.target.value as FailureType)}>{failureTypes.map((type) => <option key={type} value={type}>{type.replaceAll("_", " ")}</option>)}</select></label><label className="field">Duration (seconds)<input type="number" min={1} max={900} value={failureDuration} onChange={(event) => setFailureDuration(Number(event.target.value))} /></label><button className="button" disabled={run.status !== "RUNNING"} onClick={inject}>Inject failure</button></div><div className="eyebrow" style={{ marginTop: 28 }}>Live events</div><label className="field">Filter events<input aria-label="Filter live events" value={eventSearch} onChange={(event) => setEventSearch(event.target.value)} placeholder="Type or vehicle" /></label><label className="field">Severity<select aria-label="Event severity" value={eventSeverityFilter} onChange={(event) => setEventSeverityFilter(event.target.value as typeof eventSeverityFilter)}><option value="ALL">ALL</option><option value="CRITICAL">CRITICAL</option><option value="WARNING">WARNING</option><option value="INFO">INFO</option></select></label><button className="button" onClick={() => setWarningsFirst((value) => !value)}>{warningsFirst ? "Warnings first" : "Newest first"}</button><div className="events">{visibleEvents.slice(0, 40).map((event: LiveEvent) => <div className={`event ${event.severity.toLowerCase()}`} key={event.eventId}><strong>{event.type}</strong><span>{event.vehicleId ?? "SYSTEM"} · {event.simTimeMs} ms</span></div>)}</div></aside></div></main>;
 }

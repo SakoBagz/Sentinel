@@ -7,6 +7,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { useRouter } from "next/navigation";
 
 import { addVehicle, addWaypoint, createRun, deleteWaypoint, getMission, Mission, updateMission, updateWaypoint, Waypoint } from "@/lib/api";
+import { evaluateMissionReadiness } from "@/lib/mission-readiness";
 
 type Props = { missionId: string };
 
@@ -51,9 +52,17 @@ export function MissionPlanner({ missionId }: Props) {
 
   const selectedWaypoint = mission?.waypoints.find((waypoint) => waypoint.id === selectedWaypointId) ?? null;
   const missionLoaded = mission !== null;
-  const hasCompleteRoutes = mission?.vehicles.every((vehicle) =>
-    mission.waypoints.some((waypoint) => waypoint.vehicle_id === null || waypoint.vehicle_id === vehicle.id)
-  ) ?? false;
+  const fleetVehicleIds = new Set(mission?.vehicles.map((vehicle) => vehicle.id));
+  const routedVehicleIds = new Set(mission?.waypoints.map((waypoint) => waypoint.vehicle_id).filter((vehicleId): vehicleId is string => vehicleId !== null && fleetVehicleIds.has(vehicleId)));
+  const hasSharedRoute = mission?.waypoints.some((waypoint) => waypoint.vehicle_id === null) ?? false;
+  const readiness = evaluateMissionReadiness({
+    name,
+    vehicleCount: mission?.vehicles.length ?? 0,
+    routedVehicleCount: routedVehicleIds.size,
+    hasSharedRoute,
+    mapReady: basemapReady,
+  });
+  const firstReadinessBlocker = readiness.checks.find((check) => !check.ready);
 
   useEffect(() => {
     if (!missionLoaded || !mapNode.current || mapRef.current) return;
@@ -205,8 +214,15 @@ export function MissionPlanner({ missionId }: Props) {
   if (!mission) return <main className="main"><div className="card">{error ?? "Loading mission…"}</div></main>;
   return (
     <main className="main">
-      <div className="planner-heading"><div><div className="eyebrow">Mission planner</div><h1>{mission.name}</h1></div><div className="actions compact"><button className="button" disabled={busy} onClick={saveMission}>Save mission</button><button className="button primary" disabled={busy || mission.vehicles.length === 0 || !hasCompleteRoutes} title={!hasCompleteRoutes ? "Add at least one waypoint for every UAV" : undefined} onClick={startSimulation}>Start simulation</button></div></div>
+      <div className="planner-heading"><div><div className="eyebrow">Mission planner</div><h1>{mission.name}</h1></div><div className="actions compact"><button className="button" disabled={busy} onClick={saveMission}>Save mission</button><button className="button primary" disabled={busy || !readiness.ready} title={firstReadinessBlocker?.detail} onClick={startSimulation}>Start simulation</button></div></div>
       {error && <div className="notice error">{error}</div>}
+      <section className="readiness-grid" aria-label="Mission readiness">
+        <div className="card readiness-card" data-readiness={readiness.ready ? "ready" : "blocked"}>
+          <div className="readiness-header"><div><div className="eyebrow">Mission readiness</div><h2>{readiness.ready ? "Ready to launch" : "Needs attention"}</h2></div><span className={`readiness-status ${readiness.ready ? "ready" : "blocked"}`} role="status"><span className="status-dot" />{readiness.ready ? "GO" : "HOLD"}</span></div>
+          <div className="readiness-list">{readiness.checks.map((check) => <div className={`readiness-row ${check.ready ? "ready" : "blocked"}`} key={check.id}><span className="readiness-icon" aria-hidden="true">{check.ready ? "✓" : "!"}</span><div><strong>{check.label}</strong><span>{check.detail}</span></div></div>)}</div>
+        </div>
+        <div className="card safety-card"><div className="eyebrow">Safety boundary</div><h2>Simulation-only operations</h2><p>No vehicle control, targeting, engagement, or weaponized payload capability exists in the product contract.</p><div className="safety-label"><span className="status-dot" /> Read-only mission analysis</div></div>
+      </section>
       <div className="workspace">
         <aside className="rail"><div className="eyebrow">UAV fleet</div><form className="inline-form" onSubmit={handleAddVehicle}><input aria-label="Callsign" placeholder="UAV-004" value={callsign} onChange={(event) => setCallsign(event.target.value)} /><button className="button" disabled={busy}>Add</button></form><div className="list">{mission.vehicles.map((vehicle) => <button className={`list-item selectable ${selectedVehicle === vehicle.id ? "selected" : ""}`} key={vehicle.id} onClick={() => setSelectedVehicle(vehicle.id)}><strong>{vehicle.callsign}</strong><span>{vehicle.vehicle_type} · {mission.waypoints.filter((item) => item.vehicle_id === vehicle.id).length} waypoints</span></button>)}</div></aside>
         <section className="map-shell"><div ref={mapNode} className="map-canvas" data-basemap-ready={basemapReady} /><div className={`map-hint ${basemapError ? "error" : ""}`}>{basemapError ? "Basemap unavailable. Check the map connection and retry." : basemapReady ? "Select a UAV, then click the map to place a waypoint." : "Loading basemap…"}</div></section>

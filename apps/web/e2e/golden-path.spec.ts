@@ -38,6 +38,8 @@ test("runs the browser golden path through live telemetry, replay, and debrief",
   await page.goto(`/missions/${mission.id}/plan`);
   await expect(page.getByText(`E2E-${suffix}`)).toBeVisible();
   await expect(page.getByRole("button", { name: "Start simulation" })).toBeDisabled();
+  const readiness = page.getByLabel("Mission readiness");
+  await expect(readiness).toContainText("Needs attention");
   const map = page.locator(".map-canvas.maplibregl-map");
   await expect(map).toBeVisible();
   await expect(map).toHaveAttribute("data-basemap-ready", "true", { timeout: 20_000 });
@@ -48,12 +50,14 @@ test("runs the browser golden path through live telemetry, replay, and debrief",
     const response = await request.get(`${apiBase}/api/missions/${mission.id}`);
     return (await response.json() as { waypoints: unknown[] }).waypoints.length;
   }).toBe(1);
+  await expect(readiness).toContainText("Ready to launch");
   await expect(page.getByRole("button", { name: "Start simulation" })).toBeEnabled();
   await page.getByRole("button", { name: "Start simulation" }).click();
   await expect(page).toHaveURL(/\/runs\/[^/]+\/live/, { timeout: 15_000 });
   const runId = page.url().match(/\/runs\/([^/]+)\/live/)?.[1];
   expect(runId).toBeTruthy();
   await expect(page.getByText("Vehicle detail")).toBeVisible();
+  await expect(page.getByLabel("Operational diagnostics")).toBeVisible();
 
   await page.getByRole("button", { name: "Start simulation" }).click();
   await expect(page.getByRole("button", { name: "Inject failure" })).toBeEnabled();

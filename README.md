@@ -16,6 +16,10 @@ provider-neutral read-only Mission Analyst with mock and optional Gemini adapter
 The landing page includes a deterministic 25-UAV Angeles Forest demo launcher, and
 the browser golden path is covered by Playwright against the Compose stack.
 
+For a recruiter-facing walkthrough, see [`docs/ENGINEERING_SHOWCASE.md`](docs/ENGINEERING_SHOWCASE.md).
+It explains the one-minute demo path, the engineering proof points to inspect, and
+resume language that keeps benchmark claims honest.
+
 ## Local development
 
 Requirements: Docker, Python 3.11+ (3.12+ recommended), Node.js 22.x, and npm.

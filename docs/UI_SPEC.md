@@ -37,6 +37,12 @@ The map renders home/base positions, vehicle positions, waypoint markers, editab
 route polylines, and later survey regions. The live map adds planned routes and bounded
 completed trails. Map provider configuration is isolated from the mission domain.
 
+Before launch, the planner displays a mission-readiness gate covering mission identity,
+fleet assignment, route coverage, and basemap availability. A blocked check explains
+the next operator action; a ready state is explicit and the launch command remains
+disabled until all checks pass. The planner also states the simulation-only safety
+boundary so readiness is not confused with vehicle control authorization.
+
 ## Live operations
 
 The flagship live view contains:
@@ -50,6 +56,9 @@ The flagship live view contains:
   communications, latest sequence, missing, duplicate, and out-of-order counts;
 - live event timeline with severity, vehicle, type, and time filters;
 - connection indicator with `LIVE`, `RECONNECTING`, or `DISCONNECTED` text.
+- operational diagnostics showing persisted telemetry count, measured telemetry rate,
+  p95 delivery latency, communications availability, browser sequence counters, and
+  whether durable metrics are currently available.
 
 Vehicle position should interpolate between known telemetry points when appropriate;
 visual smoothing must not rewrite factual telemetry values.
