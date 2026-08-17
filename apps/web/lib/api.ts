@@ -71,13 +71,22 @@ export const runSchema = z.object({
 export type Run = z.infer<typeof runSchema>;
 
 async function request<T>(path: string, init?: RequestInit, schema?: z.ZodType<T>): Promise<T> {
-  let response: Response;
-  try {
-    response = await fetch(`${apiBase}${path}`, {
-      ...init,
-      headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
-    });
-  } catch {
+  const method = (init?.method ?? "GET").toUpperCase();
+  const retryDelays = method === "GET" || method === "HEAD" ? [0, 300, 900] : [0];
+  let response: Response | undefined;
+  for (const delay of retryDelays) {
+    if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
+    try {
+      response = await fetch(`${apiBase}${path}`, {
+        ...init,
+        headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+      });
+      break;
+    } catch {
+      if (init?.signal?.aborted) throw new Error("The request was cancelled.");
+    }
+  }
+  if (!response) {
     throw new Error(`Sentinel API is unavailable at ${apiBase}. Start the local services and try again.`);
   }
   if (!response.ok) {

@@ -11,7 +11,7 @@ export default function HomePage() {
     <main className="main home-main">
       <div className="home-hero-layout">
         <section className="hero">
-          <div className="eyebrow">Portfolio engineering platform / 01</div>
+          <div className="eyebrow">Mission control / overview</div>
           <h1>Mission operations, made inspectable.</h1>
           <p>
             Sentinel is a benign UAV operations simulator built to make distributed-systems
@@ -29,8 +29,8 @@ export default function HomePage() {
             </div>
           </div>
           <div className="home-context">
-            <StatusBadge label="Portfolio build" tone="positive" />
-            <span><strong>Data path:</strong> simulator → Redis Streams → PostgreSQL → replay</span>
+            <StatusBadge label="Simulation console" tone="neutral" />
+            <span><strong>Operational loop:</strong> define, observe, review</span>
           </div>
         </section>
         <OverviewField />
@@ -38,8 +38,8 @@ export default function HomePage() {
 
       <section className="workflow-section" aria-labelledby="workflow-heading">
         <div className="section-heading">
-          <div><div className="eyebrow">Operating loop</div><h2 id="workflow-heading">Every screen has one job.</h2></div>
-          <span className="section-aside">Configure → observe → explain</span>
+          <div><div className="eyebrow">Mission lifecycle</div><h2 id="workflow-heading">Plan, operate, review.</h2></div>
+          <span className="section-aside">Definition → execution → evidence</span>
         </div>
         <div className="workflow-grid">
           <Link className="workflow-step" href="/missions">
@@ -72,7 +72,6 @@ export default function HomePage() {
           <div className="home-context"><ShieldCheck size={15} aria-hidden="true" /><span>Read-only analysis / simulation-only operations</span></div>
         </div>
       </section>
-      <div className="notice portfolio-note"><strong>Demo mode:</strong> public capacity is intentionally bounded. Benchmark claims belong to the local harness and should disclose vehicle count, telemetry rate, duration, and hardware.</div>
     </main>
   );
 }

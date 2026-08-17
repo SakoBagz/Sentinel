@@ -81,11 +81,10 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .workflow-link { display: inline-flex; align-items: center; gap: 7px; margin-top: 20px; color: var(--ink); font-size: 12px; font-weight: 700; }
 .workflow-link:hover { text-decoration: underline; text-underline-offset: 4px; }
 .home-system-grid { display: grid; grid-template-columns: 1.1fr .9fr; gap: 14px; margin-top: 14px; }
-.portfolio-note { margin-top: 14px; }
 .home-hero-layout { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(360px, .92fr); align-items: center; gap: 28px; }
-.overview-field { position: relative; min-height: 460px; overflow: hidden; margin: 0; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); box-shadow: var(--shadow); }
+.overview-field { position: relative; height: clamp(460px, 42vw, 620px); min-height: 460px; overflow: hidden; margin: 0; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); box-shadow: var(--shadow); }
 .overview-field::after { position: absolute; inset: 18px; border: 1px solid rgba(241, 242, 243, .08); content: ""; pointer-events: none; }
-.overview-field canvas { display: block; width: 100%; height: 100%; min-height: 460px; }
+.overview-field canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; min-height: 0; }
 .overview-field-fallback { position: absolute; top: 50%; left: 50%; width: 260px; height: 260px; transform: translate(-50%, -50%); opacity: .78; pointer-events: none; }
 .field-orbit { position: absolute; top: 50%; left: 50%; border: 1px solid rgba(217, 221, 225, .48); border-radius: 50%; transform: translate(-50%, -50%); }
 .orbit-a { width: 214px; height: 214px; transform: translate(-50%, -50%) rotate(24deg) scaleY(.42); }
