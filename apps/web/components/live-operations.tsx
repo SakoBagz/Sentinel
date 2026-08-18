@@ -264,6 +264,24 @@ export function LiveOperations({ runId }: { runId: string }) {
   }, [runId, metricsLive]);
 
   useEffect(() => {
+    if (!metricsLive) return;
+    let active = true;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const refreshRun = async () => {
+      try {
+        const latestRun = await getRun(runId);
+        if (active) setRun(latestRun);
+      } catch (reason: unknown) {
+        if (active) setError(reason instanceof Error ? reason.message : "Unable to refresh run status");
+      } finally {
+        if (active) timer = setTimeout(refreshRun, 2_000);
+      }
+    };
+    timer = setTimeout(refreshRun, 2_000);
+    return () => { active = false; if (timer) clearTimeout(timer); };
+  }, [runId, metricsLive]);
+
+  useEffect(() => {
     const wsBase = process.env.NEXT_PUBLIC_WS_BASE_URL ?? "ws://localhost:8000";
     let socket: WebSocket | null = null;
     let retry: ReturnType<typeof setTimeout> | undefined;

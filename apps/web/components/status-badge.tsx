@@ -21,7 +21,7 @@ export function StatusBadge({
   className?: string;
 }) {
   return (
-    <span className={`status-badge ${tone} ${className}`.trim()} role="status">
+    <span className={`status-badge ${tone} ${className}`.trim()} role="status" aria-label={label}>
       <span className="status-symbol" aria-hidden="true">{toneSymbols[tone]}</span>
       <span>{label}</span>
       {detail && <span className="status-detail">{detail}</span>}

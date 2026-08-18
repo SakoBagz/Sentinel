@@ -12,19 +12,20 @@ test("launches the seeded public demo from the landing page", async ({ page }) =
   await expect(page.getByRole("button", { name: "Launch seeded demo" })).toBeVisible();
   await page.getByRole("button", { name: "Launch seeded demo" }).click();
   await expect(page).toHaveURL(/\/runs\/[^/]+\/live/, { timeout: 30_000 });
-  await expect(page.getByText("Vehicle detail")).toBeVisible();
-  await expect(page.getByText("Fleet telemetry")).toBeVisible();
+  await expect(page.getByLabel("Vehicle detail")).toBeVisible();
+  await expect(page.getByRole("complementary", { name: "Fleet telemetry" })).toBeVisible();
 });
 
 test("runs the browser golden path through live telemetry, replay, and debrief", async ({ page, request }) => {
   test.setTimeout(240_000);
   const suffix = Date.now().toString(36);
+  const callsign = `E2E-${suffix}`;
   const mission = await json<{ id: string }>(await request.post(`${apiBase}/api/missions`, {
     data: { name: `Browser golden path ${suffix}`, scenario_type: "environmental_survey" },
   }));
-  const vehicle = await json<{ id: string }>(await request.post(`${apiBase}/api/missions/${mission.id}/vehicles`, {
+  await json<{ id: string }>(await request.post(`${apiBase}/api/missions/${mission.id}/vehicles`, {
     data: {
-      callsign: `E2E-${suffix}`,
+      callsign,
       vehicle_type: "SURVEY",
       max_speed_mps: 25,
       cruise_speed_mps: 18,
@@ -36,7 +37,7 @@ test("runs the browser golden path through live telemetry, replay, and debrief",
     },
   }));
   await page.goto(`/missions/${mission.id}/plan`);
-  await expect(page.getByText(`E2E-${suffix}`)).toBeVisible();
+  await expect(page.getByRole("button", { name: `${callsign} SURVEY · 0 route` })).toBeVisible();
   await expect(page.getByRole("button", { name: "Create run" })).toBeDisabled();
   const readiness = page.getByLabel("Mission readiness");
   await expect(readiness).toContainText("Resolve before launch");
@@ -56,7 +57,7 @@ test("runs the browser golden path through live telemetry, replay, and debrief",
   await expect(page).toHaveURL(/\/runs\/[^/]+\/live/, { timeout: 15_000 });
   const runId = page.url().match(/\/runs\/([^/]+)\/live/)?.[1];
   expect(runId).toBeTruthy();
-  await expect(page.getByText("Vehicle detail")).toBeVisible();
+  await expect(page.getByLabel("Vehicle detail")).toBeVisible();
   await expect(page.getByLabel("Operational diagnostics")).toBeVisible();
 
   await page.getByRole("button", { name: "Start run" }).click();
