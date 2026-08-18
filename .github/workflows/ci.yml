@@ -55,8 +55,19 @@ jobs:
         run: docker compose up -d --build
       - name: Wait for API and web
         run: |
-          curl --retry 30 --retry-delay 2 --retry-connrefused --fail http://127.0.0.1:8000/api/health
-          curl --retry 30 --retry-delay 2 --retry-connrefused --fail http://127.0.0.1:3000/
+          set -euo pipefail
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --show-error --retry 1 --retry-all-errors --connect-timeout 2 --max-time 5 http://127.0.0.1:8000/api/health >/dev/null \
+              && curl --fail --silent --show-error --retry 1 --retry-all-errors --connect-timeout 2 --max-time 5 http://127.0.0.1:3000/ >/dev/null; then
+              exit 0
+            fi
+            echo "Services are still starting (attempt ${attempt}/60)"
+            sleep 2
+          done
+          echo "Services did not become ready in time"
+          docker compose ps
+          docker compose logs --tail=200 api web
+          exit 1
       - name: Install Chromium
         run: npx playwright install --with-deps chromium
       - name: Run browser golden path
