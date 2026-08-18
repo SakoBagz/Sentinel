@@ -93,10 +93,17 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .orbit-b { width: 188px; height: 188px; transform: translate(-50%, -50%) rotate(-35deg) scaleY(.64); border-color: rgba(160, 166, 173, .55); }
 .fallback-uav { position: absolute; top: 50%; left: 50%; width: 260px; height: 130px; transform: translate(-50%, -50%) rotate(-8deg); }
 .fallback-uav-body { position: absolute; top: 50px; left: 82px; width: 105px; height: 27px; border: 1px solid var(--ink); border-radius: 56% 42% 42% 48%; background: var(--muted); box-shadow: 0 8px 20px rgba(0, 0, 0, .3); }
+.fallback-uav-body::after { position: absolute; top: 5px; left: 40px; width: 38px; height: 1px; background: var(--line); content: ""; }
 .fallback-uav-nose { position: absolute; top: 54px; left: 61px; width: 0; height: 0; border-top: 10px solid transparent; border-bottom: 10px solid transparent; border-right: 26px solid var(--ink); transform: rotate(2deg); }
+.fallback-uav-canopy { position: absolute; top: 42px; left: 119px; width: 34px; height: 12px; border: 1px solid var(--line-strong); border-radius: 50% 50% 42% 42%; background: var(--surface-raised); transform: rotate(-3deg); }
+.fallback-uav-sensor { position: absolute; top: 72px; left: 120px; width: 19px; height: 12px; border: 1px solid var(--line-strong); border-radius: 48%; background: var(--surface-soft); }
+.fallback-uav-sensor::after { position: absolute; top: 3px; left: 6px; width: 5px; height: 5px; border: 1px solid var(--ink); border-radius: 50%; background: var(--bg); content: ""; }
 .fallback-uav-wing { position: absolute; top: 57px; width: 132px; height: 12px; border: 1px solid var(--line-strong); background: var(--muted); }
 .fallback-uav-wing-left { left: 3px; clip-path: polygon(0 45%, 100% 0, 92% 100%, 12% 82%); }
 .fallback-uav-wing-right { right: 3px; clip-path: polygon(0 0, 100% 45%, 88% 82%, 8% 100%); }
+.fallback-uav-winglet { position: absolute; top: 43px; width: 7px; height: 27px; border: 1px solid var(--line-strong); background: var(--quiet); }
+.fallback-uav-winglet-left { left: 4px; transform: rotate(8deg); }
+.fallback-uav-winglet-right { right: 4px; transform: rotate(-8deg); }
 .fallback-uav-tail { position: absolute; left: 157px; width: 43px; height: 7px; border: 1px solid var(--line-strong); background: var(--quiet); }
 .fallback-uav-tail-left { top: 39px; transform: rotate(22deg); }
 .fallback-uav-tail-right { top: 77px; transform: rotate(-22deg); }
