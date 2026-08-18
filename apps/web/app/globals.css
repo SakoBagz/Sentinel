@@ -85,9 +85,11 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .home-hero-layout { display: grid; grid-template-columns: minmax(0, 1.08fr) minmax(360px, .92fr); align-items: center; gap: 28px; }
 .overview-field { position: relative; height: clamp(460px, 42vw, 620px); min-height: 460px; overflow: hidden; margin: 0; border: 1px solid var(--line); border-radius: 7px; background: var(--surface); box-shadow: var(--shadow); }
 .overview-field::after { position: absolute; inset: 18px; border: 1px solid rgba(241, 242, 243, .08); content: ""; pointer-events: none; }
-.overview-field canvas { position: absolute; inset: 0; display: block; width: 100%; height: 100%; min-height: 0; }
-.overview-field-fallback { position: absolute; top: 50%; left: 50%; width: 260px; height: 260px; transform: translate(-50%, -50%); opacity: .78; pointer-events: none; }
-.overview-field[data-rendered="true"] .overview-field-fallback { opacity: .12; }
+.overview-field-stage { position: absolute; inset: 19px; overflow: hidden; border-radius: 2px; background: #111315; }
+.overview-field-embed { position: absolute; inset: 0; width: 100%; height: 100%; border: 0; opacity: 0; transition: opacity .35s ease; }
+.overview-field-stage.is-loaded .overview-field-embed { opacity: 1; }
+.overview-field-fallback { position: absolute; top: 50%; left: 50%; width: 260px; height: 260px; transform: translate(-50%, -50%); opacity: .78; pointer-events: none; transition: opacity .35s ease; }
+.overview-field-stage.is-loaded .overview-field-fallback { opacity: 0; }
 .field-orbit { position: absolute; top: 50%; left: 50%; border: 1px solid rgba(217, 221, 225, .48); border-radius: 50%; transform: translate(-50%, -50%); }
 .orbit-a { width: 214px; height: 214px; transform: translate(-50%, -50%) rotate(24deg) scaleY(.42); }
 .orbit-b { width: 188px; height: 188px; transform: translate(-50%, -50%) rotate(-35deg) scaleY(.64); border-color: rgba(160, 166, 173, .55); }
@@ -102,7 +104,9 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .fallback-uav-tail-right { top: 77px; transform: rotate(-22deg); }
 .fallback-uav-propeller { position: absolute; top: 45px; left: 185px; width: 3px; height: 36px; border-radius: 50%; background: var(--ink); transform: rotate(7deg); }
 .fallback-uav-propeller::before { position: absolute; top: 16px; left: -11px; width: 25px; height: 3px; border-radius: 50%; background: var(--ink); content: ""; }
-.overview-field-caption { position: absolute; right: 18px; bottom: 16px; left: 18px; z-index: 2; display: flex; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.overview-field-caption { position: absolute; right: 18px; bottom: 16px; left: 18px; z-index: 2; display: flex; align-items: flex-end; justify-content: space-between; gap: 12px; color: var(--muted); font-size: 10px; letter-spacing: .08em; text-transform: uppercase; }
+.overview-field-caption a { color: inherit; text-decoration: underline; text-decoration-color: var(--line-strong); text-underline-offset: 3px; }
+.overview-field-caption a:hover { color: var(--ink); text-decoration-color: currentColor; }
 .overview-field-label { position: absolute; top: 30px; left: 30px; z-index: 2; display: grid; gap: 5px; color: var(--quiet); font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 9px; letter-spacing: .1em; }
 .workflow-step h2 { display: flex; align-items: center; gap: 8px; }
 .workflow-step h2 svg { color: var(--muted); }
