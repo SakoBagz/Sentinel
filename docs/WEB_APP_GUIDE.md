@@ -84,9 +84,8 @@ Feature surfaces live in focused components:
 - `replay-viewer.tsx` plus `replay-map.tsx` — persisted cursor, event navigation, and
   historical map state.
 - `debrief-dashboard.tsx` — metrics, integrity accounting, and Mission Analyst output.
-- `overview-field.tsx` — decorative MQ-9 Reaper airframe reference using the
-  Sketchfab Viewer API, with camera fitting, a dark presentation surface, and a CSS
-  fallback when the external viewer is unavailable.
+- `overview-field.tsx` — decorative Three.js overview visualization with a CSS
+  fallback when WebGL is unavailable.
 
 ## Visual decisions
 
@@ -95,12 +94,10 @@ charcoal surfaces, visible separators, white primary actions, and explicit symbo
 state. The map is filtered to grayscale so geographic context supports the console
 hierarchy instead of becoming a second color system.
 
-The homepage airframe is an attributed CC BY model by Tyler V. Howell, hosted through
-Sketchfab's supported Viewer API. The visible attribution link is part of the product
-surface and must remain with the model. The viewer is progressive enhancement: it needs
-network access to Sketchfab, while the local CSS silhouette keeps the page legible if
-the external model or WebGL is unavailable. Viewer-only airframe geometry is used; no
-aircraft control, payload control, or targeting behavior is connected to it.
+Three.js is intentionally limited to the overview screen. It communicates the project's
+systems character without competing with the operational map, live telemetry, or
+evidence. WebGL is progressive enhancement; the page remains legible and complete
+without it.
 
 ## Deliberately absent from this web surface
 
