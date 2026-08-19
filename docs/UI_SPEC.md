@@ -18,14 +18,14 @@ and interaction rules that the implementation must preserve.
 
 | Route | Purpose |
 |---|---|
-| `/` | Landing page and seeded demo entry |
+| `/` | Landing page and seeded-run entry |
 | `/missions` | Mission list |
 | `/missions/[id]/plan` | Mission planner |
 | `/runs/[id]/live` | Live mission operations |
 | `/runs/[id]/replay` | Historical replay |
-| `/runs/[id]/debrief` | Metrics and AI analysis |
+| `/runs/[id]/debrief` | Metrics and operational analysis |
 
-The landing page exposes one primary **Launch seeded demo** action and one secondary
+The landing page exposes one primary **Launch seeded run** action and one secondary
 **Open mission catalog** action. The global shell keeps Overview and Missions available
 on every screen. Launch errors remain visible inline without losing landing context.
 
@@ -84,7 +84,7 @@ seek, playback speed, jump to event, selected vehicle, and timeline highlighting
 
 The debrief screen shows actual mission duration, vehicle count, completion,
 communications availability, warning/critical counts, throughput, latency percentiles,
-and task completion. The Mission Analyst panel shows structured answer, confidence,
+and task completion. The analysis panel shows a structured answer, confidence,
 limitations, and clickable evidence references.
 
 ## Component boundaries
@@ -107,7 +107,7 @@ FailureInjectionPanel
 SimulationControls
 PlaybackControls
 DebriefSummary
-MissionAssistant
+OperationalAnalysis
 EvidenceLink
 ConnectionStatus
 ```
@@ -140,8 +140,8 @@ and shows “Starting Sentinel simulation service…” rather than a blank/erro
 After the retry threshold, it shows a clear temporary-unavailable message and keeps
 historical/local UI context intact where possible.
 
-AI provider failure is shown as “Mission Analyst is temporarily unavailable. Core
-simulation and replay functionality remain operational.”
+Analysis-provider failure is shown as “Operational analysis is temporarily
+unavailable. Core simulation and replay functionality remain operational.”
 
 ## Resolved interaction baselines
 

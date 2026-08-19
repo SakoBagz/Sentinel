@@ -12,11 +12,11 @@ services:
         value: "true"
       - key: WEB_ORIGIN
         sync: false
-      - key: AI_PROVIDER
+      - key: ANALYSIS_PROVIDER
         value: mock
       - key: DATABASE_URL
         sync: false
       - key: REDIS_URL
         sync: false
-      - key: GEMINI_API_KEY
+      - key: ANALYSIS_API_KEY
         sync: false

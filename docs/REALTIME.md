@@ -121,7 +121,7 @@ server may batch across vehicles but must not mutate sequence numbers.
 - Durable history is served from PostgreSQL after transient recovery.
 - A missing transient stream message is not fabricated; the UI indicates gaps where
   sequence accounting detects them.
-- AI/provider failures do not affect realtime operations.
+- Analysis-provider failures do not affect realtime operations.
 
 ## Realtime metrics
 

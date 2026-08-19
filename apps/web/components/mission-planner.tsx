@@ -105,10 +105,18 @@ export function MissionPlanner({ missionId }: Props) {
       zoom: 10,
     });
     map.addControl(new maplibregl.NavigationControl(), "top-right");
-    map.on("idle", () => {
-      if (map.queryRenderedFeatures().length > 0) setBasemapReady(true);
+    let styleLoaded = false;
+    map.once("load", () => {
+      styleLoaded = true;
+      setBasemapReady(true);
+      setBasemapError(false);
     });
-    map.on("error", () => { setBasemapError(true); setBasemapReady(false); });
+    map.on("error", () => {
+      if (!styleLoaded) {
+        setBasemapError(true);
+        setBasemapReady(false);
+      }
+    });
     map.on("click", async (event) => {
       const vehicleId = selectedVehicleRef.current;
       const currentMission = missionRef.current;

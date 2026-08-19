@@ -11,7 +11,7 @@ tick to PostgreSQL. A persistence worker validates, batches, retries, and idempo
 writes telemetry; important mission events are persisted at full fidelity.
 
 Default rates: simulation tick 10 Hz locally; live telemetry 10 Hz locally and 5 Hz
-in public demo mode; durable telemetry 2 Hz configurable; important events 100%.
+in hosted mode; durable telemetry 2 Hz configurable; important events 100%.
 
 ## Relational model
 
@@ -134,7 +134,7 @@ Required fields are `id` UUID primary key, `run_id` UUID, optional `provider` an
 ## Retention and cleanup
 
 The public profile must provide an explicit cleanup utility. It may keep the seeded
-demo run and recent public runs, delete older telemetry-heavy runs, and retain
+seeded run and recent hosted runs, delete older telemetry-heavy runs, and retain
 aggregate benchmark summaries. No development data is deleted automatically unless an
 explicit setting enables it.
 

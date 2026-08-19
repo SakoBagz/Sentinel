@@ -143,7 +143,7 @@ delivered state; it does not rewind simulation time.
 - A duplicate sequence has the same event identity/payload for a given generated
   message.
 - Randomness comes only from the run-seeded random source.
-- AI cannot invoke domain mutation commands.
+- Read-only analysis cannot invoke domain mutation commands.
 
 ## Boundary ownership
 
@@ -157,4 +157,4 @@ delivered state; it does not rewind simulation time.
 | Persistence and idempotency | Application + repository layer |
 | REST/WebSocket transport | API/realtime adapters |
 | Presentation interpolation | Web client |
-| AI factual grounding | AI tools and provider adapter |
+| Evidence-backed analysis | Read-only analysis tools and provider adapter |

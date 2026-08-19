@@ -1,28 +1,26 @@
-# Sentinel Product Specification
+# Sentinel product specification
 
-Status: Phase 14 implementation baseline
-Date: 2026-08-12  
-Source: Sentinel Master Engineering Specification & Coding-Agent Constitution
+Status: implementation baseline
 
 ## Product definition
 
 Sentinel is a real-time mission-planning, UAV fleet simulation, telemetry-monitoring,
-failure-injection, replay, performance-analysis, and AI-assisted mission-debrief
-platform. It demonstrates software-systems engineering using a benign UAV operations
-domain; it is not an aerodynamics or weapons system.
+failure-injection, replay, performance-analysis, and operational-debrief platform. It
+demonstrates software-systems engineering through a benign UAV operations domain; it
+is not an aerodynamics or weapons system.
 
 The primary user journey is:
 
 1. Create or select a mission.
 2. Add simulated UAVs, starting positions, routes, parameters, and network profiles.
-3. Start a deterministic simulation run.
+3. Create and start a deterministic simulation run.
 4. Observe live positions, telemetry, vehicle state, battery, communications health,
    warnings, and mission progress.
 5. Inject an allowed simulated failure and observe degradation and recovery.
 6. Complete and persist the run.
 7. Replay the persisted run without rerunning the simulation.
 8. Inspect operational and system metrics.
-9. Ask the read-only Mission Analyst questions grounded in mission data.
+9. Generate a read-only operational summary grounded in persisted mission data.
 10. Follow evidence references into the corresponding event and replay timestamp.
 
 ## Supported scenarios
@@ -41,7 +39,7 @@ The primary user journey is:
 
 Sentinel must not implement weapon control, target selection, strike planning,
 autonomous engagement, firing solutions, weaponized payload control, defense-system
-evasion, stealth optimization, or autonomous pursuit of people. The AI Mission Analyst
+evasion, stealth optimization, or autonomous pursuit of people. Operational analysis
 is read-only and may retrieve, summarize, compare, and explain simulated data only.
 
 ## Product principles
@@ -53,7 +51,7 @@ is read-only and may retrieve, summarize, compare, and explain simulated data on
 - Replays show persisted historical data and never rerun simulation logic.
 - Important events are persisted at full fidelity; high-frequency telemetry may be
   downsampled.
-- Public cloud limits are enforced server-side and do not represent benchmark scale.
+- Hosted limits are enforced server-side and do not represent benchmark scale.
 - Provider-specific integrations remain replaceable.
 
 ## Operating profiles
@@ -64,12 +62,12 @@ Docker Compose runs PostgreSQL, Redis/Valkey, FastAPI, Next.js, and the simulato
 The target profile supports 100–1,000+ vehicles, normally at 10 Hz telemetry, for
 tests, profiling, and benchmark runs.
 
-### Public portfolio demo mode
+### Hosted profile
 
-The demo is intentionally bounded: up to 50 vehicles, 5 Hz telemetry, 15-minute
-maximum mission duration, 5 runs per session, and 10 AI questions per run. The UI
-must disclose that cloud capacity is limited and that scale results come from the
-local benchmark environment.
+The hosted profile is intentionally bounded: up to 50 vehicles, 5 Hz telemetry,
+15-minute maximum mission duration, 5 runs per session, and 10 analysis questions per
+run. Scale results come from the local benchmark environment and are not implied by
+hosted limits.
 
 ## Flagship seeded scenario
 
@@ -83,64 +81,41 @@ local benchmark environment.
 - a battery return-threshold event for UAV-12
 - elevated packet loss for UAV-18
 
-The seed and scenario definition must make those incidents repeatable. The exact
-seed is an implementation fixture and must be recorded with the run rather than
-hardcoded in the UI.
+The seed and scenario definition make those incidents repeatable. The exact seed is
+recorded with the run rather than hardcoded in the UI.
 
-## Phase boundaries
-
-The authoritative contracts in this directory are implemented incrementally on the
-phase branches recorded in Git history. The current main branch includes the planner,
-simulator, realtime telemetry, failures, persistence/replay, metrics, AI, runtime
-controls, deployment hardening, the seeded public launch path, and executable
-browser/migration gates; benchmark scale remains an explicit measurement activity
-rather than a claim about the public demo.
-
-## Acceptance criteria by product milestone
+## Acceptance criteria
 
 - **Skeleton:** local services start, health reports dependencies, tests and builds pass.
 - **Planner:** a mission with three UAVs and multiple routes survives save/reload.
-- **Simulation:** fixed mission plus seed reproduces routes, state transitions,
-  battery, and completion.
+- **Simulation:** a fixed mission and seed reproduce routes, state transitions,
+  battery behavior, and completion.
 - **Realtime:** live markers, telemetry, events, selection, and reconnect work.
 - **Failures:** communication state degrades, disconnects, recovers, and does not
-  freeze vehicle simulation; sequence statistics are correct.
+  freeze vehicle simulation; sequence statistics remain correct.
 - **Replay:** completed data survives restart and supports play, pause, seek, speed,
   and event jumps without rerunning.
-- **Metrics:** 100/250/500-vehicle benchmarks produce actual measured results.
-- **AI:** read-only tool calls answer from actual data and link evidence; provider
-  failure does not affect core operations.
-- **Public demo:** an anonymous user can launch the seeded scenario, observe it,
-  inject a safe failure, replay it, view metrics, and use AI when quota allows.
+- **Metrics:** benchmark profiles produce measured results rather than hardcoded claims.
+- **Analysis:** read-only summaries use actual data and link persisted evidence;
+  provider failure does not affect core operations.
+- **Hosted run:** an anonymous user can launch the seeded scenario, observe it, inject a
+  safe failure, replay it, and view metrics within server-side limits.
 
 ## Resolved contract baselines
 
-These baselines are implemented across the API, database, simulator, and web client:
-
-1. **Mission vehicle membership.** The master minimum table list has no explicit
-   mission-to-vehicle join table. This baseline defines a `mission_vehicles` join
-   table in the database design and uses its ID for mission-scoped waypoint/API
-   references; it is the cleanest way to support a vehicle with no waypoint yet. If
-   migrations and API schemas use that association as the authoritative membership
-   mechanism.
-2. **Mission versus run status.** Mission is reusable, while a run is one execution.
-   This baseline treats `MissionStatus` as the reusable definition lifecycle and
-   `RunStatus` as the execution lifecycle, while retaining the master's state values
-   where applicable. Public responses use the typed schemas documented in `API.md`.
-3. **Run-scoped vehicle IDs.** This baseline uses `run_vehicles.id` for telemetry,
-   event, and API references within a run; `vehicle_definition_id` points to the
-   reusable static definition. This prevents ambiguity across repeated runs.
-4. **Telemetry event identity.** The envelope requires `event_id`, but the minimum
-   telemetry table omits it. This baseline stores it in `telemetry_samples` in the
-   durable storage while retaining `(run_id, vehicle_id, sequence)` as the idempotency
-   key.
+1. **Mission vehicle membership.** `mission_vehicles` is the authoritative join table
+   for mission-scoped vehicle assignments and waypoint references.
+2. **Mission versus run status.** A mission is reusable; a run is one execution. The
+   API exposes typed schemas for both lifecycles.
+3. **Run-scoped vehicle IDs.** `run_vehicles.id` is used for telemetry and event
+   references within a run; `vehicle_definition_id` points to the reusable definition.
+4. **Telemetry event identity.** Durable telemetry stores `event_id` while retaining
+   `(run_id, vehicle_id, sequence)` as the idempotency key.
 5. **Stop semantics.** `POST /runs/{run_id}/stop` transitions an active run to
-   `ABORTED`; normal completion remains simulator-driven. The coordinator observes the
-   command and stops progression without overwriting the abort with completion.
-6. **Simulation speed.** This baseline treats `simulation_speed` as a multiplier on
-   wall-clock scheduling while simulation time remains deterministic. It must not
-   alter the tick algorithm or seeded random sequence.
-7. **AI network-statistics input.** Every AI tool, including `get_network_statistics`,
-   must receive or derive a `run_id`; the master example omits it for that tool.
-8. **Event identifiers in the UI.** Database event UUIDs are canonical. Short labels
-   such as `E-91822` are presentation aliases, not alternate identities.
+   `ABORTED`; normal completion remains simulator-driven.
+6. **Simulation speed.** `simulation_speed` changes wall-clock scheduling while
+   simulation time and seeded randomness remain deterministic.
+7. **Analysis evidence.** Every evidence reference is validated against the requested
+   run before it is returned.
+8. **Event identifiers in the UI.** Database event UUIDs are canonical; short labels
+   are presentation aliases only.

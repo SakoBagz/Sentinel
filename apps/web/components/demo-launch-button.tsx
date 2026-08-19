@@ -18,7 +18,7 @@ export function DemoLaunchButton() {
       const run = await launchDemo();
       router.push(`/runs/${run.id}/live`);
     } catch (reason: unknown) {
-      setError(reason instanceof Error ? reason.message : "Unable to launch the seeded demo");
+      setError(reason instanceof Error ? reason.message : "Unable to launch the seeded run");
     } finally {
       setBusy(false);
     }
@@ -28,7 +28,7 @@ export function DemoLaunchButton() {
     <div className="hero-action-block">
       <button className="button primary" onClick={launch} disabled={busy} aria-busy={busy}>
         <Play size={14} fill="currentColor" aria-hidden="true" />
-        {busy ? "Creating seeded run…" : "Launch seeded demo"}
+        {busy ? "Creating seeded run…" : "Launch seeded run"}
       </button>
       {error && <p className="notice error" role="alert">{error}</p>}
     </div>

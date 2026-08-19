@@ -56,7 +56,7 @@ Supported scenario types are `search_and_rescue`, `wildfire_monitoring`,
 `communications_relay`, and `angeles_forest_survey`. The backend rejects arbitrary
 scenario strings so catalog filtering and downstream analytics share one vocabulary.
 
-## Seeded demo endpoint
+## Seeded run endpoint
 
 ### `POST /api/demo/launch`
 
@@ -65,7 +65,7 @@ returns its current `READY`, `RUNNING`, or `PAUSED` run when one already exists.
 response uses the normal `RunRead` contract. Clients should send `X-Session-Id` when
 available so public run limits and browser retries use a stable anonymous session key.
 The seeded run records scenario `angeles_forest_survey`, seed `20260812`, 25 UAVs, and
-the three repeatable demo failures described in `PRODUCT_SPEC.md`.
+the three repeatable seeded failures described in `PRODUCT_SPEC.md`.
 
 ## Waypoint endpoints
 
@@ -164,16 +164,16 @@ Returns bounded telemetry data for a requested time window. It accepts `start_ms
 full requested window, preserving each vehicle's first and last available state.
 The server never executes a new simulation for replay.
 
-## AI endpoints
+## Analysis endpoints
 
 | Method | Path | Purpose |
 |---|---|---|
 | POST | `/api/runs/{run_id}/debrief` | Generate or retrieve structured debrief |
-| POST | `/api/runs/{run_id}/assistant` | Ask the read-only Mission Analyst |
+| POST | `/api/runs/{run_id}/assistant` | Ask a bounded read-only operational question |
 
-Assistant requests contain a user message and optional conversation context with a
-bounded size. Responses follow the structured schema in `AI_ASSISTANT.md`. Quota,
-rate, and provider errors are explicit and do not fail core run/replay endpoints.
+Requests contain a user message and optional conversation context with a bounded size.
+Quota, rate, and provider errors are explicit and do not fail core run/replay
+endpoints. The analysis contract is documented in `ANALYSIS.md`.
 
 The response includes `run_id`, `answer`, controlled `confidence`, bounded `evidence`
 references, `limitations`, provider/model metadata, and optional structured debrief
@@ -205,11 +205,11 @@ The initial API is versioned by the `/api` contract plus versioned payload envel
 Breaking payload changes require a documented contract revision and migration. Event
 schema versions are independent of REST route versions.
 
-## Public demo protections
+## Hosted protections
 
 When `PUBLIC_DEMO=true`, the server enforces `MAX_VEHICLES=50`,
 `MAX_MISSION_DURATION_MINUTES=15`, `MAX_RUNS_PER_SESSION=5`,
-`MAX_AI_QUESTIONS_PER_RUN=10`, and `MAX_TELEMETRY_RATE_HZ=5`. The frontend may explain
+`MAX_ANALYSIS_QUESTIONS_PER_RUN=10`, and `MAX_TELEMETRY_RATE_HZ=5`. The frontend may explain
 these limits but cannot be the enforcement point.
 
 ## Remaining API hardening

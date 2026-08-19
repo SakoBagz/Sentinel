@@ -1,135 +1,107 @@
-# Sentinel Deployment Strategy
+# Sentinel deployment strategy
 
 The supported JavaScript runtime is pinned to Node 22.x in `.nvmrc`, CI, and the
 Dockerfiles. Node 24 is not the supported local runtime for this Next.js baseline.
 
-Status: Phase 14 implementation baseline
-Date: 2026-08-12
+## Local profile
 
-## Cost constraint
-
-The complete project must be buildable, testable, publicly deployable, and maintainable
-at zero recurring cost. No required paid cloud instance, database, map provider,
-Redis service, domain, AI API, or observability platform may be introduced.
-
-## Local engineering profile
-
-Docker Compose starts PostgreSQL and Redis/Valkey. Developers then run the Next.js
-frontend, FastAPI backend, and simulator locally or through a convenience command.
-The target workflow is:
+Docker Compose starts PostgreSQL, Redis/Valkey, the FastAPI service, and the Next.js
+application. The target workflow is:
 
 ```text
-docker compose up -d
-make dev
+docker compose up -d --build
 ```
 
-The service names, ports, health checks, and volumes are defined in
-`docker-compose.yml`. The host PostgreSQL port defaults to `55432` to avoid colliding
-with an existing local PostgreSQL installation; the container still listens on `5432`.
-Local mode defaults to `PUBLIC_DEMO=false`, up to 1,000 simulated vehicles,
-10 Hz telemetry, and 2 Hz durable persistence.
+The host PostgreSQL port defaults to `55432` to avoid colliding with an existing local
+installation; the container still listens on `5432`. Local mode defaults to up to
+1,000 simulated vehicles, 10 Hz telemetry, and 2 Hz durable persistence.
 
-## Public portfolio profile
+## Hosted profile
 
-The proposed zero-cost provider layout is:
+The reference zero-cost layout is:
 
 | Component | Provider/profile |
-|---|---|
-| Frontend | Vercel Hobby |
-| Backend | Render free web service |
-| PostgreSQL | Neon free PostgreSQL |
-| Transient events | Render Key Value / Valkey |
+| --- | --- |
+| Frontend | Vercel Hobby or equivalent Node host |
+| Backend | Render free web service or equivalent container host |
+| PostgreSQL | Managed PostgreSQL free tier |
+| Transient events | Managed Redis/Valkey free tier |
 | Maps | MapLibre GL JS + OpenFreeMap |
-| AI | Gemini Developer API free tier, with mock/disabled fallback |
 | CI/CD | GitHub Actions |
 
-Provider adapters and environment variables must make substitutions possible if free
-tiers change. The system must not depend on an external paid service for its core
-workflow.
+Provider adapters and environment variables keep substitutions possible if free tiers
+change. The core workflow must not depend on one paid service.
 
 ## Environment configuration
 
-`.env.example` will document placeholders only, including:
+`.env.example` contains placeholders only. Production values are injected by the host.
+Secrets are never committed, logged, or returned in health/errors.
 
 ```text
 APP_ENV=development
 DATABASE_URL=postgresql://...
 REDIS_URL=redis://localhost:6379
-AI_PROVIDER=mock
-GEMINI_API_KEY=
+ANALYSIS_PROVIDER=mock
+ANALYSIS_API_KEY=
 PUBLIC_DEMO=false
 SIM_MAX_VEHICLES=1000
 DEFAULT_TELEMETRY_RATE_HZ=10
 TELEMETRY_PERSIST_RATE_HZ=2
 MAX_MISSION_DURATION_MINUTES=15
 MAX_RUNS_PER_SESSION=5
-MAX_AI_QUESTIONS_PER_RUN=10
+MAX_ANALYSIS_QUESTIONS_PER_RUN=10
 ```
 
-Production values are injected by the host. Secrets are never committed, logged, or
-returned in health/errors.
+## Server-side limits
 
-## Public server-side limits
+With `PUBLIC_DEMO=true`, the backend enforces 50 vehicles, a 15-minute maximum
+mission duration, 5 runs per session, 10 analysis questions per run, and 5 Hz maximum
+telemetry. These limits remain effective if a client is modified.
 
-With `PUBLIC_DEMO=true`, enforce 50 vehicles, 15-minute maximum mission duration,
-5 runs per session, 10 AI questions per run, and 5 Hz maximum telemetry. These limits
-apply in the backend even if a client is modified.
-
-Anonymous access is intentional for recruiter usability. The backend derives a bounded
-session key from `X-Session-Id` or the forwarded client address and enforces the run
-quota server-side. This is a lightweight demo guard, not an authentication system; a
+Anonymous access uses a bounded session key from `X-Session-Id` or the forwarded client
+address. This is a lightweight hosted guard, not an authentication system; a
 production deployment should place a trusted proxy/session layer in front of it.
 
 ## Cold starts and dependency degradation
 
-The frontend checks `/api/health` with bounded exponential backoff and displays a
-starting state during free-tier cold starts. After the retry threshold it explains
-that the backend is temporarily unavailable and offers retry.
+The frontend checks `/api/health` with bounded backoff and presents a starting state
+during a cold start. If the backend remains unavailable, the UI offers a clear retry
+path instead of a blank or broken screen.
 
-Redis/Valkey restart behavior is explicitly ephemeral: reconnect streams and consumers,
-restore application connections, and never assume transient state survived. Durable
-mission history and replay remain available from PostgreSQL.
+Redis/Valkey is intentionally transient: reconnect streams and consumers after a
+restart, but never assume transient state survived. Durable mission history and replay
+remain available from PostgreSQL.
 
-AI quota or provider failure displays an unavailable state while core simulation,
+Analysis-provider failure displays an unavailable state while core simulation,
 telemetry, replay, and metrics continue.
 
 ## CI/CD
 
-GitHub Actions runs backend lint/type checks/pytest/integration tests, frontend
-ESLint/TypeScript/Vitest/production build, and Playwright as configured by the test
-plan. Deployment is blocked while required checks fail. Deployment configuration is
-kept in `infrastructure/render/`, `infrastructure/vercel/`, and `infrastructure/docs/`
-without introducing Kubernetes or Terraform initially.
+GitHub Actions runs migrations, backend and simulator tests, static checks, frontend
+ESLint/TypeScript/Vitest/build, and Playwright against the built Compose stack.
+Deployment is blocked while required checks fail. Deployment configuration lives in
+`infrastructure/render/`, `infrastructure/vercel/`, and `infrastructure/docs/`.
 
-## Observability
+## Observability and retention
 
-No paid observability service is required. Use structured application logs, internal
-metrics, benchmark output, and provider logs from Render/Vercel where available.
-Include timestamp, level, service, mission ID, run ID, vehicle ID, event ID, and
-message where applicable.
+Structured logs and the built-in metrics surface provide service, mission, run,
+vehicle, event, and timing context without requiring a paid observability platform.
 
-## Retention
+Hosted database storage is limited. `scripts/cleanup_runs.py` supports dry-run
+retention review before older telemetry-heavy runs are removed. Automatic deletion is
+disabled for development data.
 
-Public database storage is limited. Provide an explicit cleanup script that can keep
-the seeded demo and recent runs, remove older telemetry-heavy runs, and retain
-aggregate benchmark summaries. Automatic deletion is disabled for development data.
+## Deployment acceptance
 
-## Deployment acceptance criteria
-
-From an anonymous browser, a user can open Sentinel, launch the seeded demo, see moving
-vehicles and telemetry, inject an allowed failure, complete a run, open replay, view
-metrics, and use AI when quota is available. No paid infrastructure is required.
+From an anonymous browser, a user can open Sentinel, launch the seeded run, see moving
+vehicles and telemetry, inject an allowed failure, complete the run, open replay, and
+view metrics. CI exercises this path before deployment.
 
 ## Implementation status
 
-- Provider layouts are documented as portable configuration rather than required
-  dependencies; free-tier availability must still be checked at deployment time.
-- The landing page's **Launch seeded demo** button calls `POST /api/demo/launch`; the
-  endpoint is idempotent for an active canonical run and creates the deterministic
-  25-UAV scenario when needed.
-- `scripts/seed_demo.py` uses the same endpoint, and `scripts/cleanup_runs.py` is
-  dry-run by default for retention review.
-- The API container runs Alembic before Uvicorn; local Compose and the Render Docker
-  service therefore share the same migration-on-start behavior.
-- CI checks the migration chain on SQLite, runs backend static checks and tests, and
-  exercises the browser golden path against a built Compose stack before deployment.
+- The API container runs Alembic before Uvicorn, keeping local Compose and hosted
+  container startup behavior aligned.
+- `scripts/seed_demo.py` uses the same seeded-run endpoint as the landing page.
+- `scripts/cleanup_runs.py` is dry-run by default for retention review.
+- CI checks the migration chain on SQLite and exercises the browser golden path against
+  a built Compose stack.

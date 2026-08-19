@@ -15,7 +15,7 @@ export default function HomePage() {
           <p>
             Sentinel is a benign UAV operations simulator built to make distributed-systems
             behavior visible: deterministic movement, unreliable communications, durable
-            telemetry, replay, and evidence-grounded analysis.
+            telemetry, replay, and evidence-backed operational analysis.
           </p>
           <div className="hero-actions">
             <div className="hero-action-block">
@@ -64,8 +64,8 @@ export default function HomePage() {
 
       <section className="card home-safety-card" aria-label="Safety boundary">
           <div className="eyebrow">Safety boundary</div>
-          <h2>Analysis without authority</h2>
-          <p>The Mission Analyst can summarize simulated data and link to supporting events. It cannot modify missions, command vehicles, target people, or control payloads.</p>
+          <h2>Analysis without command authority</h2>
+          <p>Operational analysis can summarize simulated data and link to supporting events. It cannot modify missions, command vehicles, target people, or control payloads.</p>
           <div className="home-context"><ShieldCheck size={15} aria-hidden="true" /><span>Read-only analysis / simulation-only operations</span></div>
       </section>
     </main>

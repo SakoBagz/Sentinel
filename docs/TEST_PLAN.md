@@ -5,10 +5,9 @@ Date: 2026-08-12
 
 ## Testing principles
 
-AI-generated code is not trusted because it compiles. Every non-trivial behavior gets
-an automated test at the narrowest useful layer, with integration and end-to-end tests
-for boundaries. Normal CI must be deterministic and must not require live AI calls or
-paid infrastructure.
+Every non-trivial behavior gets an automated test at the narrowest useful layer, with
+integration and end-to-end tests for boundaries. Normal CI must be deterministic and
+must not require an external provider or paid infrastructure.
 
 ## Test layers
 
@@ -49,7 +48,7 @@ and connection-state behavior.
 
 Playwright covers the executable local acceptance path:
 
-1. Open Sentinel and launch the seeded public demo.
+1. Open Sentinel and launch the seeded run.
 2. Create a mission through the API fixture, add a UAV, verify an unrouted mission
    cannot start, verify that the mission readiness gate reports the blocker, verify
    that OpenFreeMap rendered geographic features (not only an empty canvas), and add
@@ -68,12 +67,12 @@ Pydantic and Zod schemas are tested with valid, invalid, unknown-version, malfor
 out-of-range, and cross-run identifier cases. REST and WebSocket fixtures must assert
 that external payloads match `API.md`, `EVENT_CONTRACTS.md`, and `REALTIME.md`.
 
-## AI tests
+## Analysis tests
 
-The mock provider is the default. Test that tools are read-only, run/vehicle arguments
-are validated, evidence IDs come from the queried run, missing data is acknowledged,
-unsupported safety questions are declined, malformed provider output is rejected, and
-provider outage preserves core functionality.
+The deterministic provider is the default. Test that analysis tools are read-only,
+run/vehicle arguments are validated, evidence IDs come from the queried run, missing
+data is acknowledged, unsupported safety questions are declined, malformed provider
+output is rejected, and provider outage preserves core functionality.
 
 ## CI gates
 
@@ -97,7 +96,7 @@ Frontend:
 System:
 
 - Playwright with the built Docker Compose acceptance stack, including the public
-  seeded-demo and planner-to-debrief golden paths.
+  seeded-run and planner-to-debrief golden paths.
 
 Deployment cannot proceed from main while required checks fail. Tests must not be
 hidden, skipped silently, or replaced with fabricated results.

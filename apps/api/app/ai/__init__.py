@@ -1,1 +1,1 @@
-"""Provider-neutral, read-only Mission Analyst components."""
+"""Provider-neutral, read-only operational analysis components."""

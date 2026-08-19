@@ -41,8 +41,8 @@ services:
       DEFAULT_TELEMETRY_RATE_HZ: 10
       MAX_MISSION_DURATION_MINUTES: 15
       MAX_RUNS_PER_SESSION: 5
-      MAX_AI_QUESTIONS_PER_RUN: 10
-      AI_PROVIDER: mock
+      MAX_ANALYSIS_QUESTIONS_PER_RUN: 10
+      ANALYSIS_PROVIDER: mock
     ports:
       - "8000:8000"
     depends_on:

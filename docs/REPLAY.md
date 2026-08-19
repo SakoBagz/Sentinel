@@ -46,8 +46,8 @@ should be labeled if a distinction matters.
 ## Event navigation
 
 Clicking a timeline event selects its vehicle, seeks to its `sim_time_ms`, and
-highlights the event. AI evidence links use the same event ID and timestamp, opening
-the replay at the corresponding location.
+highlights the event. Analysis evidence links use the same event ID and timestamp,
+opening the replay at the corresponding location.
 
 ## Historical fidelity
 

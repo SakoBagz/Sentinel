@@ -23,7 +23,7 @@ def test_mock_analyst_declines_unsafe_guidance() -> None:
 def test_mock_analyst_endpoint_is_read_only_and_structured(client) -> None:
     mission = client.post("/api/missions", json={"name": "Analyst test"}).json()
     vehicle = client.post(
-        f"/api/missions/{mission['id']}/vehicles", json={"callsign": "UAV-AI"}
+        f"/api/missions/{mission['id']}/vehicles", json={"callsign": "UAV-ANALYSIS"}
     )
     vehicle.raise_for_status()
     client.post(

@@ -9,5 +9,5 @@ NEXT_PUBLIC_WS_BASE_URL=wss://<render-api-host>
 ```
 
 The frontend keeps MapLibre/OpenFreeMap as the map dependency and does not require a
-paid tile provider. The backend remains responsible for public-demo limits and AI
+paid tile provider. The backend remains responsible for hosted limits and analysis
 quota enforcement.

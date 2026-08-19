@@ -41,9 +41,9 @@ class AnalystService:
         while recent and recent[0] <= now - 1.0:
             recent.popleft()
         if recent:
-            raise AnalystRateLimited("Mission Analyst requests are rate limited")
-        if self._counts[key] >= settings.max_ai_questions_per_run:
-            raise AnalystQuotaExceeded("Mission Analyst question quota exceeded for this run")
+            raise AnalystRateLimited("Operational analysis requests are rate limited")
+        if self._counts[key] >= settings.max_analysis_questions_per_run:
+            raise AnalystQuotaExceeded("Operational analysis question quota exceeded for this run")
         recent.append(now)
         self._counts[key] += 1
 
@@ -80,7 +80,7 @@ class AnalystService:
             allowed.update(str(event.get("id")) for event in vehicle.get("important_events", []))
         invalid = [evidence.event_id for evidence in result.evidence if str(evidence.event_id) not in allowed]
         if invalid:
-            raise AnalystProviderError("Mission Analyst returned evidence outside the queried run")
+            raise AnalystProviderError("Operational analysis returned evidence outside the queried run")
         return result
 
     async def analyze(
@@ -92,10 +92,10 @@ class AnalystService:
     ) -> AnalystResult:
         self._consume(run_id, session_key)
         context = await self._context(session, run_id, request.message, request.conversation_context)
-        provider = provider_for(get_settings().ai_provider, get_settings().gemini_api_key)
+        provider = provider_for(get_settings().analysis_provider, get_settings().analysis_api_key)
         result = await provider.analyze(run_id, request.message, context)
         if result.run_id != run_id:
-            raise AnalystProviderError("Mission Analyst returned a mismatched run identifier")
+            raise AnalystProviderError("Operational analysis returned a mismatched run identifier")
         return self._validate_evidence(result, context)
 
     async def debrief(self, session: AsyncSession, run_id: UUID, session_key: str) -> AnalystResult:

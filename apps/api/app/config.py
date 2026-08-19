@@ -1,6 +1,6 @@
 from functools import lru_cache
 
-from pydantic import Field
+from pydantic import AliasChoices, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -20,9 +20,19 @@ class Settings(BaseSettings):
     waypoint_arrival_radius_m: float = Field(default=10.0, gt=0)
     max_mission_duration_minutes: int = Field(default=15, ge=1)
     max_runs_per_session: int = Field(default=5, ge=1)
-    max_ai_questions_per_run: int = Field(default=10, ge=1)
-    ai_provider: str = "mock"
-    gemini_api_key: str | None = None
+    max_analysis_questions_per_run: int = Field(
+        default=10,
+        ge=1,
+        validation_alias=AliasChoices("MAX_ANALYSIS_QUESTIONS_PER_RUN", "MAX_AI_QUESTIONS_PER_RUN"),
+    )
+    analysis_provider: str = Field(
+        default="mock",
+        validation_alias=AliasChoices("ANALYSIS_PROVIDER", "AI_PROVIDER"),
+    )
+    analysis_api_key: str | None = Field(
+        default=None,
+        validation_alias=AliasChoices("ANALYSIS_API_KEY", "GEMINI_API_KEY"),
+    )
 
     model_config = SettingsConfigDict(
         env_file=".env",

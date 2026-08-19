@@ -15,23 +15,23 @@ Mission definition
 Run execution
   ├─ transient WebSocket telemetry
   ├─ durable metrics and events
-  └─ persisted replay and debrief
+  └─ persisted replay and operational analysis
 ```
 
 A mission is reusable configuration. A run is one execution of that configuration.
-Editing a mission does not rewrite a completed run. Replay and debrief read the run's
+Editing a mission does not rewrite a completed run. Replay and operational analysis read the run's
 persisted data and never execute simulation logic again.
 
 ## Screen contract
 
 | Route | Owns | Primary action | Action effect |
 |---|---|---|---|
-| `/` | Orientation and demo entry | **Launch seeded demo** | Creates or reconnects to the bounded seeded run and opens live operations. |
+| `/` | Orientation and seeded-run entry | **Launch seeded run** | Creates or reconnects to the bounded seeded run and opens live operations. |
 | `/missions` | Mission definitions | **New mission** | Creates a draft definition; it does not start a run. |
 | `/missions/[id]/plan` | Fleet, route, and readiness | **Create run** | Creates a new run only when every preflight check passes. |
 | `/runs/[id]/live` | Current execution | **Start/Pause/Resume/Stop run** | Sends the corresponding run lifecycle command. Fault injection creates an auditable simulated impairment. |
 | `/runs/[id]/replay` | Historical evidence | **Play/Pause, seek, focus, event links** | Moves a presentation cursor through persisted samples; it never changes the run. |
-| `/runs/[id]/debrief` | Measurements and analysis | **Generate debrief / Ask analyst** | Reads metrics or requests read-only analysis grounded in the run. |
+| `/runs/[id]/debrief` | Measurements and analysis | **Generate analysis / Ask analysis** | Reads metrics or requests a read-only summary grounded in the run. |
 
 Every run screen exposes the same three-view navigation: Live operations, Replay, and
 Debrief. This prevents the user from needing browser history to move through the
@@ -48,7 +48,7 @@ operational loop.
 | Create run | Creates a new durable run record | A run captures its own seed, lifecycle, telemetry, events, and replay. |
 | Failure injection | Durable event plus simulator effect | The action is restricted to the safe failure taxonomy and remains auditable. |
 | Replay controls | Local presentation state | Seeking and playback do not mutate telemetry or rerun the simulator. |
-| Analyst question | Read-only request | The analyst may summarize and cite evidence but has no mutation or vehicle-control tool. |
+| Analysis question | Read-only request | The analysis surface may summarize and cite evidence but has no mutation or vehicle-control tool. |
 
 The planner's readiness gate blocks a run when identity, saved configuration, fleet
 membership, route coverage, or basemap context is incomplete. The disabled action's
@@ -83,7 +83,7 @@ Feature surfaces live in focused components:
   fault injection, and event filtering.
 - `replay-viewer.tsx` plus `replay-map.tsx` — persisted cursor, event navigation, and
   historical map state.
-- `debrief-dashboard.tsx` — metrics, integrity accounting, and Mission Analyst output.
+- `debrief-dashboard.tsx` — metrics, integrity accounting, and operational analysis output.
 - `overview-field.tsx` — decorative Three.js overview visualization with a CSS
   fallback when WebGL is unavailable.
 

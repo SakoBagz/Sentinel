@@ -7,10 +7,10 @@ async function json<T>(response: { ok(): boolean; json(): Promise<T> }): Promise
   return response.json();
 }
 
-test("launches the seeded public demo from the landing page", async ({ page }) => {
+test("launches the seeded run from the landing page", async ({ page }) => {
   await page.goto("/");
-  await expect(page.getByRole("button", { name: "Launch seeded demo" })).toBeVisible();
-  await page.getByRole("button", { name: "Launch seeded demo" }).click();
+  await expect(page.getByRole("button", { name: "Launch seeded run" })).toBeVisible();
+  await page.getByRole("button", { name: "Launch seeded run" }).click();
   await expect(page).toHaveURL(/\/runs\/[^/]+\/live/, { timeout: 30_000 });
   await expect(page.getByLabel("Vehicle detail")).toBeVisible();
   await expect(page.getByRole("complementary", { name: "Fleet telemetry" })).toBeVisible();
@@ -76,6 +76,6 @@ test("runs the browser golden path through live telemetry, replay, and debrief",
 
   await page.goto(`/runs/${runId}/debrief`);
   await expect(page.getByText("Operational debrief")).toBeVisible();
-  await page.getByRole("button", { name: "Generate debrief" }).click();
-  await expect(page.getByText("Analyst response")).toBeVisible({ timeout: 15_000 });
+  await page.getByRole("button", { name: "Generate analysis" }).click();
+  await expect(page.getByText("Analysis response")).toBeVisible({ timeout: 15_000 });
 });

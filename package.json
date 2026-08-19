@@ -2,6 +2,16 @@
   "name": "sentinel",
   "private": true,
   "version": "0.1.0",
+  "description": "Real-time UAV mission operations simulator with deterministic replay and resilient telemetry",
+  "keywords": [
+    "uav",
+    "simulation",
+    "telemetry",
+    "websockets",
+    "replay",
+    "fastapi",
+    "nextjs"
+  ],
   "engines": {
     "node": ">=22 <23",
     "npm": ">=10"

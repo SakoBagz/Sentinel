@@ -13,7 +13,7 @@ These are target workloads and acceptance goals, not existing results:
 | Scale | 500 UAVs × 10 messages/sec ≈ 5,000 generated msg/sec | measure actual throughput/latency |
 | Stretch | 1,000 UAVs × 10 messages/sec ≈ 10,000 generated msg/sec | measure feasibility and bottleneck |
 
-Public demo limits are intentionally lower and must not be presented as scale proof.
+Hosted limits are intentionally lower and must not be presented as scale proof.
 
 ## Metrics
 
