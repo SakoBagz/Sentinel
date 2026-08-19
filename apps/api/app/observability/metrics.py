@@ -32,14 +32,19 @@ class MetricsRegistry:
         "telemetry_messages_out_of_order_total",
         "persistence_errors_total",
         "realtime_publish_errors_total",
+        "websocket_queue_drops_total",
     )
     _gauge_names = (
         "websocket_connections_active",
         "simulation_vehicle_count",
         "stream_consumer_lag",
+        "persistence_queue_depth",
+        "persistence_queue_high_water_mark",
     )
     _histogram_names = (
-        "telemetry_end_to_end_latency_ms",
+        "telemetry_modeled_network_latency_ms",
+        "redis_publish_duration_ms",
+        "persistence_backpressure_wait_ms",
         "event_processing_latency_ms",
         "simulation_tick_duration_ms",
         "database_batch_write_duration_ms",

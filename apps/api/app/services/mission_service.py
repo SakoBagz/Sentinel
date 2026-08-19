@@ -9,6 +9,7 @@ from sqlalchemy.orm import selectinload
 from sqlalchemy.sql import Select
 
 from app.api.schemas import MissionCreate, MissionUpdate, VehicleCreate, WaypointCreate, WaypointUpdate
+from app.config import get_settings
 from app.db.models.entities import Mission, MissionVehicle, VehicleDefinition, Waypoint
 from app.domain.enums import MissionStatus
 from app.services.public_limits import ensure_vehicle_allowed
@@ -109,8 +110,10 @@ async def add_vehicle(session: AsyncSession, mission_id: UUID, payload: VehicleC
     mission = await get_mission(session, mission_id)
     if mission.status in {MissionStatus.RUNNING, MissionStatus.PAUSED}:
         raise MissionConflict("Vehicles cannot be changed during an active run")
+    settings = get_settings()
+    telemetry_rate_hz = payload.telemetry_rate_hz or settings.default_telemetry_rate_hz
     try:
-        await ensure_vehicle_allowed(session, mission_id, payload.telemetry_rate_hz)
+        await ensure_vehicle_allowed(session, mission_id, telemetry_rate_hz)
     except ValueError as exc:
         raise MissionConflict(str(exc)) from exc
     duplicate = await session.scalar(select(VehicleDefinition).where(VehicleDefinition.callsign == payload.callsign))
@@ -131,7 +134,7 @@ async def add_vehicle(session: AsyncSession, mission_id: UUID, payload: VehicleC
             max_speed_mps=payload.max_speed_mps,
             cruise_speed_mps=payload.cruise_speed_mps,
             battery_capacity=payload.battery_capacity,
-            telemetry_rate_hz=payload.telemetry_rate_hz,
+            telemetry_rate_hz=telemetry_rate_hz,
             configuration=payload.configuration,
         )
         session.add(definition)

@@ -136,5 +136,14 @@ class SimulationResult:
     vehicles: tuple[VehicleSnapshot, ...]
 
 
+@dataclass(frozen=True)
+class SimulationOutputs:
+    """A bounded batch drained by a live coordinator after each engine tick."""
+
+    generated_telemetry: tuple[TelemetryEnvelope, ...]
+    telemetry: tuple[TelemetryEnvelope, ...]
+    events: tuple[SimulationEvent, ...]
+
+
 def deterministic_id(run_id: UUID, name: str, ordinal: int) -> UUID:
     return uuid5(run_id, f"sentinel:{name}:{ordinal}")

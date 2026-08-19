@@ -1,4 +1,6 @@
 from dataclasses import dataclass
+from fractions import Fraction
+import math
 from uuid import UUID
 
 from app.domain.enums import CommunicationsState, EventSeverity, EventType, FailureType, VehicleMissionState
@@ -8,6 +10,7 @@ from sentinel_sim.clock import SimulationClock
 from sentinel_sim.models import (
     MissionConfiguration,
     SimulationEvent,
+    SimulationOutputs,
     SimulationResult,
     TelemetryEnvelope,
     VehicleConfiguration,
@@ -50,6 +53,7 @@ class SimulationEngine:
         telemetry_rate_hz: float | None = None,
         battery_model: BatteryModel | None = None,
         network_profiles: dict[UUID, NetworkConfiguration] | None = None,
+        retain_history: bool = True,
     ) -> None:
         if not mission.vehicles:
             raise ValueError("A simulation requires at least one vehicle")
@@ -60,15 +64,33 @@ class SimulationEngine:
         self.random = SeededRandom(random_seed)
         self.random_seed = random_seed
         self.clock = SimulationClock(tick_hz=tick_hz)
-        self.telemetry_rate_hz = telemetry_rate_hz or tick_hz
-        self.telemetry_period_ms = max(1, round(1000 / self.telemetry_rate_hz))
-        self.next_telemetry_ms = self.telemetry_period_ms
+        if telemetry_rate_hz is not None and (
+            not math.isfinite(telemetry_rate_hz) or telemetry_rate_hz <= 0
+        ):
+            raise ValueError("telemetry_rate_hz must be finite and positive")
+        # Kept for source compatibility with the simulator-only benchmark. The
+        # configured rate on each VehicleConfiguration is authoritative.
+        self.telemetry_rate_hz = telemetry_rate_hz
+        self.retain_history = retain_history
         self.battery_model = battery_model or BatteryModel()
         self.network = NetworkSimulator(self.random, network_profiles)
         self.vehicles = {
             config.id: _RuntimeVehicle(config=config, position=config.starting_position)
             for config in mission.vehicles
         }
+        tick_fraction = Fraction(str(self.clock.tick_hz))
+        self._telemetry_rate_ratios: dict[UUID, Fraction] = {}
+        self._telemetry_phase: dict[UUID, Fraction] = {}
+        for config in mission.vehicles:
+            if not math.isfinite(config.telemetry_rate_hz) or config.telemetry_rate_hz <= 0:
+                raise ValueError(f"telemetry rate for {config.callsign} must be finite and positive")
+            if config.telemetry_rate_hz > self.clock.tick_hz:
+                raise ValueError(
+                    f"telemetry rate for {config.callsign} ({config.telemetry_rate_hz:g} Hz) "
+                    f"cannot exceed simulation tick rate ({self.clock.tick_hz:g} Hz)"
+                )
+            self._telemetry_rate_ratios[config.id] = Fraction(str(config.telemetry_rate_hz)) / tick_fraction
+            self._telemetry_phase[config.id] = Fraction(0)
         self.routes: dict[UUID, tuple] = {
             vehicle_id: tuple(
                 sorted(
@@ -84,6 +106,9 @@ class SimulationEngine:
         self.telemetry: list[TelemetryEnvelope] = []
         self.generated_telemetry: list[TelemetryEnvelope] = []
         self.events: list[SimulationEvent] = []
+        self._generated_output: list[TelemetryEnvelope] = []
+        self._telemetry_output: list[TelemetryEnvelope] = []
+        self._event_output: list[SimulationEvent] = []
         self._event_ordinal = 0
 
     def inject_failure(
@@ -128,18 +153,19 @@ class SimulationEngine:
         payload: dict,
     ) -> None:
         self._event_ordinal += 1
-        self.events.append(
-            SimulationEvent(
-                mission_id=self.mission.id,
-                run_id=self.run_id,
-                vehicle_id=vehicle.config.id,
-                event_type=event_type,
-                severity=severity,
-                sim_time_ms=self.clock.sim_time_ms,
-                payload={"callsign": vehicle.config.callsign, **payload},
-                event_id=deterministic_id(self.run_id, event_type.value, self._event_ordinal),
-            )
+        event = SimulationEvent(
+            mission_id=self.mission.id,
+            run_id=self.run_id,
+            vehicle_id=vehicle.config.id,
+            event_type=event_type,
+            severity=severity,
+            sim_time_ms=self.clock.sim_time_ms,
+            payload={"callsign": vehicle.config.callsign, **payload},
+            event_id=deterministic_id(self.run_id, event_type.value, self._event_ordinal),
         )
+        self._event_output.append(event)
+        if self.retain_history:
+            self.events.append(event)
 
     def _transition(self, vehicle: _RuntimeVehicle, state: VehicleMissionState, event_type: EventType) -> None:
         vehicle.mission_state = state
@@ -301,9 +327,19 @@ class SimulationEngine:
                     "sensor_status": vehicle.sensor_status,
                 },
             )
-        self.generated_telemetry.append(envelope)
+        self._generated_output.append(envelope)
+        if self.retain_history:
+            self.generated_telemetry.append(envelope)
         self.network.submit(envelope)
         vehicle.sequence += 1
+
+    def _telemetry_due(self, vehicle_id: UUID) -> bool:
+        phase = self._telemetry_phase[vehicle_id] + self._telemetry_rate_ratios[vehicle_id]
+        if phase < 1:
+            self._telemetry_phase[vehicle_id] = phase
+            return False
+        self._telemetry_phase[vehicle_id] = phase - 1
+        return True
 
     def tick(self) -> None:
         self.clock.advance()
@@ -314,14 +350,35 @@ class SimulationEngine:
                 })
             self._sync_network_state(vehicle)
             self._update_vehicle(vehicle)
-            if self.clock.sim_time_ms >= self.next_telemetry_ms:
+            if self._telemetry_due(vehicle.config.id):
                 self._emit_telemetry(vehicle)
-        if self.clock.sim_time_ms >= self.next_telemetry_ms:
-            self.next_telemetry_ms += self.telemetry_period_ms
-        self.telemetry.extend(self.network.drain(self.clock.sim_time_ms))
+        delivered = self.network.drain(self.clock.sim_time_ms)
+        self._telemetry_output.extend(delivered)
+        if self.retain_history:
+            self.telemetry.extend(delivered)
 
     def flush_pending(self) -> None:
-        self.telemetry.extend(self.network.flush(self.clock.sim_time_ms))
+        delivered = self.network.flush(self.clock.sim_time_ms)
+        self._telemetry_output.extend(delivered)
+        if self.retain_history:
+            self.telemetry.extend(delivered)
+
+    def drain_outputs(self) -> SimulationOutputs:
+        """Release outputs already consumed by a live coordinator.
+
+        Standalone callers retain the legacy full-history lists. Coordinated runs
+        construct the engine with ``retain_history=False`` and drain this bounded
+        batch once per tick instead of accumulating the full run in memory.
+        """
+        outputs = SimulationOutputs(
+            generated_telemetry=tuple(self._generated_output),
+            telemetry=tuple(self._telemetry_output),
+            events=tuple(self._event_output),
+        )
+        self._generated_output.clear()
+        self._telemetry_output.clear()
+        self._event_output.clear()
+        return outputs
 
     def is_complete(self) -> bool:
         return all(vehicle.mission_state is VehicleMissionState.COMPLETE for vehicle in self.vehicles.values())

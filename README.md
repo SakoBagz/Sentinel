@@ -30,7 +30,9 @@ explored immediately.
 - Redis/Valkey Streams for transient event fan-out and reconnectable WebSockets.
 - Seeded simulator clock and random source for repeatable run traces.
 - Versioned telemetry and event envelopes with event IDs and per-vehicle sequences.
-- Idempotent durable processing with sequence-gap, duplicate, and ordering metrics.
+- Authoritative per-vehicle telemetry scheduling with simulation-time determinism.
+- Bounded, backpressured durable processing with deterministic persistence downsampling.
+- Incremental network integrity accounting and a durable per-run telemetry summary.
 - MapLibre live/replay views with planned routes, trails, and vehicle heading state.
 - Bounded failure injection for communications, latency, packet delivery, GPS, battery,
   sensor, and service conditions.
@@ -59,7 +61,7 @@ from persisted telemetry and events.
 apps/api/       FastAPI application, domain services, migrations, and API tests
 apps/web/       Next.js application, unit tests, and Playwright acceptance tests
 simulator/      Deterministic mission engine and network/battery models
-scripts/        Seed, cleanup, load-test, and benchmark utilities
+scripts/        Seed, cleanup, simulator-only, and integrated benchmark utilities
 docs/           Architecture, contracts, product behavior, and operating notes
 infrastructure/ Deployment manifests for local and hosted environments
 ```
@@ -109,6 +111,12 @@ npm --workspace apps/web run test:e2e
 
 The end-to-end command expects the Compose API and web services to be running. CI
 installs its own browser runtime.
+
+The benchmark harnesses are intentionally separate. `scripts/benchmark.py` measures
+the in-process simulator and sink. `scripts/integrated_benchmark.py` measures the
+local `SimulationEngine → NetworkSimulator → Redis Streams → PersistenceWorker →
+PostgreSQL` path and requires the Compose PostgreSQL/Redis services plus an applied
+Alembic schema. Neither harness is a production-capacity claim.
 
 ## Documentation
 

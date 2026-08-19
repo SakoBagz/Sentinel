@@ -57,7 +57,7 @@ class VehicleCreate(APIModel):
     max_speed_mps: float = Field(default=25.0, gt=0)
     cruise_speed_mps: float = Field(default=18.0, gt=0)
     battery_capacity: float = Field(default=100.0, gt=0)
-    telemetry_rate_hz: float = Field(default=10.0, gt=0)
+    telemetry_rate_hz: float | None = Field(default=None, gt=0)
     starting_latitude: float | None = Field(default=None, ge=-90, le=90)
     starting_longitude: float | None = Field(default=None, ge=-180, le=180)
     starting_altitude_m: float | None = Field(default=None, ge=0)
@@ -261,9 +261,15 @@ class EventPage(APIModel):
 class MetricsRead(APIModel):
     run_id: UUID
     telemetry_messages_received: int
+    telemetry_messages_generated: int
+    telemetry_messages_delivered: int
+    telemetry_messages_unique_delivered: int
+    telemetry_messages_persisted: int
     telemetry_sequences_missing: int
     telemetry_sequences_duplicate: int
     telemetry_sequences_out_of_order: int
+    telemetry_loss_percent: float
+    telemetry_healthy_delivered: int
     event_count: int
     warning_count: int
     critical_count: int
@@ -275,6 +281,8 @@ class MetricsRead(APIModel):
     latency_p50_ms: float
     latency_p95_ms: float
     latency_p99_ms: float
+    simulated_mission_duration_ms: int
+    persistence_queue_high_water_mark: int
 
 
 class AnalystRequest(APIModel):

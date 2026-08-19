@@ -115,7 +115,7 @@ a second run accidentally.
 | GET | `/api/runs/{run_id}/vehicles` | Current or final run-vehicle summaries |
 | GET | `/api/runs/{run_id}/events` | Paginated/time-window event history |
 | GET | `/api/runs/{run_id}/telemetry` | Paginated/time-window telemetry |
-| GET | `/api/runs/{run_id}/metrics` | Run metrics and sequence statistics |
+| GET | `/api/runs/{run_id}/metrics` | Run summary metrics and durable event statistics |
 
 Historical query parameters:
 
@@ -207,7 +207,8 @@ schema versions are independent of REST route versions.
 
 ## Hosted protections
 
-When `PUBLIC_DEMO=true`, the server enforces `MAX_VEHICLES=50`,
+When `PUBLIC_DEMO=true`, the server enforces a 50-vehicle hosted cap in addition to
+the configured `SIM_MAX_VEHICLES` ceiling,
 `MAX_MISSION_DURATION_MINUTES=15`, `MAX_RUNS_PER_SESSION=5`,
 `MAX_ANALYSIS_QUESTIONS_PER_RUN=10`, and `MAX_TELEMETRY_RATE_HZ=5`. The frontend may explain
 these limits but cannot be the enforcement point.

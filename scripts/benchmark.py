@@ -138,7 +138,6 @@ def run_profile(vehicle_count: int, rate_hz: float, duration_seconds: float, see
     )
     tick_durations: list[float] = []
     delivery_latencies: list[float] = []
-    delivered_before = 0
     started = time.perf_counter()
     cpu_started = time.process_time()
     errors = 0
@@ -149,9 +148,7 @@ def run_profile(vehicle_count: int, rate_hz: float, duration_seconds: float, see
             engine.tick()
             tick_elapsed = (time.perf_counter() - tick_started) * 1000
             tick_durations.append(tick_elapsed)
-            delivered_batch = engine.telemetry[delivered_before:]
-            delivered_before = len(engine.telemetry)
-            delivery_latencies.extend([tick_elapsed] * len(delivered_batch))
+            delivery_latencies.extend(engine.network.take_last_delivery_latencies())
     except Exception:
         errors += 1
     wall_seconds = max(time.perf_counter() - started, 1e-9)

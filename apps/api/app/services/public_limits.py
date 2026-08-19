@@ -11,14 +11,24 @@ def session_key(session_id: str | None, forwarded_for: str | None) -> str:
     return (session_id or (forwarded_for.split(",", 1)[0].strip() if forwarded_for else "anonymous"))[:128]
 
 
+def validate_telemetry_rate(telemetry_rate_hz: float) -> None:
+    settings = get_settings()
+    if telemetry_rate_hz > settings.simulation_tick_hz:
+        raise ValueError(
+            f"Telemetry rate cannot exceed the simulation tick rate of {settings.simulation_tick_hz:g} Hz"
+        )
+
+
 async def ensure_vehicle_allowed(session: AsyncSession, mission_id: UUID, telemetry_rate_hz: float) -> None:
     settings = get_settings()
-    if not settings.public_demo:
-        return
     vehicle_ids = await session.execute(select(MissionVehicle.id).where(MissionVehicle.mission_id == mission_id))
     vehicle_count = len(vehicle_ids.scalars().all())
     if vehicle_count >= settings.effective_max_vehicles:
-        raise ValueError(f"Public demo limit is {settings.effective_max_vehicles} vehicles per mission")
+        label = "Public demo" if settings.public_demo else "Configured"
+        raise ValueError(f"{label} limit is {settings.effective_max_vehicles} vehicles per mission")
+    validate_telemetry_rate(telemetry_rate_hz)
+    if not settings.public_demo:
+        return
     if telemetry_rate_hz > settings.effective_max_telemetry_rate_hz:
         raise ValueError(f"Public demo telemetry rate limit is {settings.effective_max_telemetry_rate_hz:g} Hz")
 

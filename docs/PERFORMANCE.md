@@ -20,12 +20,14 @@ Hosted limits are intentionally lower and must not be presented as scale proof.
 Instrument at least:
 
 - `telemetry_messages_generated_total`;
-- `telemetry_messages_received_total`;
+- `telemetry_messages_received_total` (delivered live samples);
+- `telemetry_messages_persisted_total`;
 - `telemetry_messages_duplicate_total`;
 - `telemetry_messages_missing_total`;
 - `telemetry_messages_out_of_order_total`;
 - active WebSocket connections;
-- end-to-end telemetry latency in milliseconds;
+- modeled network delivery latency in milliseconds;
+- Redis publish duration in milliseconds;
 - event processing latency;
 - simulation tick duration;
 - simulation vehicle count;
@@ -99,12 +101,26 @@ The API also exposes `/api/metrics` as a Prometheus-compatible developer diagnos
 surface. Runtime counters are populated by the coordinator, WebSocket hub, and
 durable persistence worker.
 
+`scripts/integrated_benchmark.py` is a separate local-service benchmark. It accepts
+vehicle count, simulated duration, telemetry rate, persistence rate, tick rate, queue
+size, and seed, then exercises:
+
+```text
+SimulationEngine → NetworkSimulator → Redis Streams → PersistenceWorker → PostgreSQL
+```
+
+It reports generated/delivered/persisted throughput, missing/duplicate/out-of-order
+counts, tick latency, modeled network latency, Redis publish duration, database batch
+duration, persistence queue high-water, errors, and process peak memory where the
+host exposes it. It requires the local services and an applied Alembic schema. Its
+results are local measurements only; no end-to-end fleet capacity is implied.
+
 ## Implementation decisions
 
 - Runtime diagnostics use a bounded, dependency-free in-process registry with
   Prometheus-compatible exposition; external observability services are optional.
-- Runtime latency currently measures simulator-to-Redis publish/stream handling on the
-  API path. The benchmark harness reports simulator tick-to-delivery processing time;
-  neither is presented as browser receipt latency.
+- Runtime `telemetry_modeled_network_latency_ms` measures simulation emission to the
+  network's scheduled delivery time. `redis_publish_duration_ms` measures the Redis
+  publish operation separately. Neither is browser receipt latency.
 - CPU time and peak resident memory are recorded when the host exposes them; missing
   Docker or host metadata is emitted as `null`, never guessed.

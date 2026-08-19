@@ -60,3 +60,80 @@ async def test_persist_batch_is_idempotent(monkeypatch: pytest.MonkeyPatch) -> N
     assert stored is not None
     assert stored.received_at.tzinfo is None or stored.received_at.tzinfo == timezone.utc
     await engine.dispose()
+
+
+def _telemetry(sequence: int, sim_time_ms: int) -> TelemetryEnvelope:
+    return TelemetryEnvelope(
+        mission_id=MISSION_ID,
+        run_id=RUN_ID,
+        vehicle_id=VEHICLE_ID,
+        sequence=sequence,
+        sim_time_ms=sim_time_ms,
+        event_id=UUID(f"00000000-0000-0000-0000-{sequence + 200:012d}"),
+        payload={"communications_state": "HEALTHY"},
+    )
+
+
+@pytest.mark.asyncio
+async def test_persistence_downsampling_preserves_first_final_and_all_events(
+    monkeypatch: pytest.MonkeyPatch,
+) -> None:
+    seen: list[TelemetryEnvelope | SimulationEvent] = []
+
+    async def fake_persist(items) -> persistence.PersistBatchResult:
+        batch = list(items)
+        seen.extend(batch)
+        return persistence.PersistBatchResult(
+            telemetry_inserted=sum(isinstance(item, TelemetryEnvelope) for item in batch),
+            events_inserted=sum(isinstance(item, SimulationEvent) for item in batch),
+            duration_ms=0.1,
+        )
+
+    monkeypatch.setattr(persistence, "persist_batch", fake_persist)
+    worker = persistence.PersistenceWorker(
+        batch_size=100,
+        batch_window_seconds=0.01,
+        maxsize=2,
+        persist_rate_hz=2,
+    )
+    await worker.start()
+    for sequence in range(6):
+        await worker.enqueue(_telemetry(sequence, (sequence + 1) * 100))
+    events = [
+        SimulationEvent(
+            mission_id=MISSION_ID,
+            run_id=RUN_ID,
+            vehicle_id=VEHICLE_ID,
+            event_type=EventType.VEHICLE_READY,
+            severity=EventSeverity.INFO,
+            sim_time_ms=sequence * 100,
+            payload={},
+            event_id=UUID(f"00000000-0000-0000-0000-{sequence + 300:012d}"),
+        )
+        for sequence in range(3)
+    ]
+    for event in events:
+        await worker.enqueue(event)
+    await worker.finalize_telemetry()
+    await worker.stop()
+
+    persisted_sequences = [item.sequence for item in seen if isinstance(item, TelemetryEnvelope)]
+    assert persisted_sequences == [0, 4, 5]
+    assert [item for item in seen if isinstance(item, SimulationEvent)] == events
+    assert worker.queue.maxsize == 2
+    assert worker.queue_high_water_mark <= 2
+
+
+@pytest.mark.asyncio
+async def test_persistence_worker_failure_unblocks_shutdown(monkeypatch: pytest.MonkeyPatch) -> None:
+    async def fail(_items) -> persistence.PersistBatchResult:
+        raise RuntimeError("database unavailable")
+
+    monkeypatch.setattr(persistence, "persist_batch", fail)
+    worker = persistence.PersistenceWorker(batch_size=1, batch_window_seconds=0.01, maxsize=1)
+    await worker.start()
+    await worker.enqueue(_telemetry(0, 100))
+
+    with pytest.raises(RuntimeError, match="durable persistence failed"):
+        await worker.stop()
+    assert worker.queue.empty()

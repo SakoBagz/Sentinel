@@ -10,8 +10,10 @@ in-flight stream state on restart. The simulator does not synchronously write ev
 tick to PostgreSQL. A persistence worker validates, batches, retries, and idempotently
 writes telemetry; important mission events are persisted at full fidelity.
 
-Default rates: simulation tick 10 Hz locally; live telemetry 10 Hz locally and 5 Hz
-in hosted mode; durable telemetry 2 Hz configurable; important events 100%.
+Default rates: simulation tick 10 Hz locally; each vehicle's configured telemetry rate
+is authoritative (and cannot exceed the tick rate); durable telemetry 2 Hz
+configurable; live Redis/WebSocket delivery receives every delivered sample; important
+events are persisted at 100%.
 
 ## Relational model
 
@@ -108,6 +110,15 @@ nullable `vehicle_id` referencing `run_vehicles`, `event_type`, `severity`,
 `(run_id, sim_time_ms)`, `(run_id, vehicle_id, sim_time_ms)`, and
 `(run_id, event_type)`.
 
+### `run_telemetry_summaries`
+
+One row is stored for each terminal `simulation_run` using `run_id` as both primary
+key and foreign key. It records generated, delivered, unique-delivered, persisted,
+missing, duplicate, out-of-order, and healthy-delivered message counts; modeled
+network latency p50/p95/p99; persistence queue high-water mark; and simulated mission
+duration. Counts come from runtime boundaries rather than gaps in downsampled
+`telemetry_samples`.
+
 ### `failure_injections`
 
 Required fields are `id` UUID primary key, `run_id` UUID, nullable `vehicle_id` UUID,
@@ -151,7 +162,8 @@ Alembic owns reviewed schema migrations. The initial migration establishes the
 mission association table, run-scoped IDs, durable telemetry event IDs, enum
 enforcement, and delete behavior. The Phase 14 migration expands
 `simulation_runs.random_seed` to `BIGINT`, matching the documented run contract and
-allowing the full deterministic seed range.
+allowing the full deterministic seed range. The current migration adds
+`run_telemetry_summaries`.
 
 ## Resolved schema decisions
 

@@ -1,74 +1,86 @@
-from collections import defaultdict
-from datetime import timedelta, timezone
 from uuid import UUID
 
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 
-from app.db.models.entities import MissionEvent, TelemetrySample
+from app.db.models.entities import MissionEvent, RunTelemetrySummary, TelemetrySample
 from app.services.run_service import get_run
-
-
-def _percentile(values: list[float], percentile: float) -> float:
-    if not values:
-        return 0.0
-    if len(values) == 1:
-        return float(values[0])
-    values = sorted(values)
-    position = (len(values) - 1) * percentile
-    lower, upper = int(position), min(len(values) - 1, int(position) + 1)
-    return values[lower] + (values[upper] - values[lower]) * (position - lower)
 
 
 async def run_metrics(session: AsyncSession, run_id: UUID) -> dict:
     run = await get_run(session, run_id)
     telemetry = list((await session.execute(select(TelemetrySample).where(TelemetrySample.run_id == run_id))).scalars().all())
     events = list((await session.execute(select(MissionEvent).where(MissionEvent.run_id == run_id))).scalars().all())
-    by_vehicle: dict[UUID, list[int]] = defaultdict(list)
-    for sample in telemetry:
-        by_vehicle[sample.vehicle_id].append(sample.sequence)
-    missing = sum(max(0, max(sequences) - min(sequences) + 1 - len(set(sequences))) for sequences in by_vehicle.values() if sequences)
-    duplicates = sum(len(sequences) - len(set(sequences)) for sequences in by_vehicle.values())
-    out_of_order = sum(1 for sequences in by_vehicle.values() if any(right < left for left, right in zip(sequences, sequences[1:])))
-    base_time = run.started_at or run.created_at
-    if base_time.tzinfo is None:
-        base_time = base_time.replace(tzinfo=timezone.utc)
-    latency_values = [
-        float(
-            (
-                (sample.received_at.replace(tzinfo=timezone.utc) if sample.received_at.tzinfo is None else sample.received_at)
-                - (base_time + timedelta(milliseconds=sample.sim_time_ms))
-            ).total_seconds()
-            * 1000
-        )
-        for sample in telemetry
-    ]
-    critical = sum(1 for event in events if str(event.severity) == "CRITICAL")
-    warning = sum(1 for event in events if str(event.severity) == "WARNING")
-    duration = max(
-        [sample.sim_time_ms for sample in telemetry]
-        + [event.sim_time_ms for event in events]
-        + [0]
+    summary = await session.scalar(
+        select(RunTelemetrySummary).where(RunTelemetrySummary.run_id == run_id)
     )
-    throughput = len(telemetry) / max(duration / 1000, 1)
-    completed = sum(1 for vehicle in run.run_vehicles if any(event.vehicle_id == vehicle.id and str(event.event_type) == "vehicle.completed" for event in events))
-    healthy_samples = sum(1 for sample in telemetry if str(sample.communications_state) == "HEALTHY")
-    availability = (healthy_samples / len(telemetry) * 100.0) if telemetry else 0.0
+
+    def enum_value(value: object) -> str:
+        return str(getattr(value, "value", value))
+
+    critical = sum(1 for event in events if enum_value(event.severity) == "CRITICAL")
+    warning = sum(1 for event in events if enum_value(event.severity) == "WARNING")
+    completed = sum(
+        1
+        for vehicle in run.run_vehicles
+        if any(
+            event.vehicle_id == vehicle.id and enum_value(event.event_type) == "vehicle.completed"
+            for event in events
+        )
+    )
+    if summary is not None:
+        generated = summary.generated_messages
+        delivered = summary.delivered_messages
+        unique_delivered = summary.unique_delivered_messages
+        persisted = summary.persisted_messages
+        missing = summary.missing_messages
+        duplicates = summary.duplicate_messages
+        out_of_order = summary.out_of_order_messages
+        healthy_delivered = summary.healthy_delivered_messages
+        duration = summary.simulated_mission_duration_ms
+        latency = {
+            "p50": summary.modeled_latency_p50_ms,
+            "p95": summary.modeled_latency_p95_ms,
+            "p99": summary.modeled_latency_p99_ms,
+        }
+    else:
+        # Older runs predate the runtime summary. Their persisted telemetry cannot
+        # reveal dropped originals, duplicates, or modeled network latency, so do
+        # not mistake downsampling gaps for packet loss.
+        generated = delivered = unique_delivered = persisted = len(telemetry)
+        missing = duplicates = out_of_order = 0
+        healthy_delivered = sum(
+            1 for sample in telemetry if enum_value(sample.communications_state) == "HEALTHY"
+        )
+        duration = max([sample.sim_time_ms for sample in telemetry] + [event.sim_time_ms for event in events] + [0])
+        latency = {"p50": 0.0, "p95": 0.0, "p99": 0.0}
+    throughput = delivered / max(duration / 1000, 1)
+    availability = (healthy_delivered / unique_delivered * 100.0) if unique_delivered else 0.0
     return {
         "run_id": run_id,
-        "telemetry_messages_received": len(telemetry),
+        "telemetry_messages_received": delivered,
+        "telemetry_messages_generated": generated,
+        "telemetry_messages_delivered": delivered,
+        "telemetry_messages_unique_delivered": unique_delivered,
+        "telemetry_messages_persisted": persisted,
         "telemetry_sequences_missing": missing,
         "telemetry_sequences_duplicate": duplicates,
         "telemetry_sequences_out_of_order": out_of_order,
+        "telemetry_loss_percent": (missing / generated * 100.0) if generated else 0.0,
+        "telemetry_healthy_delivered": healthy_delivered,
         "event_count": len(events),
         "warning_count": warning,
         "critical_count": critical,
         "vehicle_count": len(run.run_vehicles),
         "completed_vehicle_count": completed,
         "mission_duration_ms": duration,
+        "simulated_mission_duration_ms": duration,
         "communications_availability_percent": availability,
         "telemetry_throughput_per_second": throughput,
-        "latency_p50_ms": _percentile(latency_values, 0.50),
-        "latency_p95_ms": _percentile(latency_values, 0.95),
-        "latency_p99_ms": _percentile(latency_values, 0.99),
+        "latency_p50_ms": latency["p50"],
+        "latency_p95_ms": latency["p95"],
+        "latency_p99_ms": latency["p99"],
+        "persistence_queue_high_water_mark": (
+            summary.persistence_queue_high_water_mark if summary is not None else 0
+        ),
     }

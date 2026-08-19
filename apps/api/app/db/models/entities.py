@@ -138,6 +138,32 @@ class SimulationRun(Base):
     run_vehicles: Mapped[list["RunVehicle"]] = relationship(
         back_populates="run", cascade="all, delete-orphan", lazy="selectin"
     )
+    telemetry_summary: Mapped["RunTelemetrySummary | None"] = relationship(
+        back_populates="run", cascade="all, delete-orphan", uselist=False
+    )
+
+
+class RunTelemetrySummary(Base):
+    __tablename__ = "run_telemetry_summaries"
+
+    run_id: Mapped[UUID] = mapped_column(
+        ForeignKey("simulation_runs.id", ondelete="CASCADE"), primary_key=True
+    )
+    generated_messages: Mapped[int] = mapped_column(BIGINT, nullable=False)
+    delivered_messages: Mapped[int] = mapped_column(BIGINT, nullable=False)
+    unique_delivered_messages: Mapped[int] = mapped_column(BIGINT, nullable=False)
+    persisted_messages: Mapped[int] = mapped_column(BIGINT, nullable=False)
+    missing_messages: Mapped[int] = mapped_column(BIGINT, nullable=False)
+    duplicate_messages: Mapped[int] = mapped_column(BIGINT, nullable=False)
+    out_of_order_messages: Mapped[int] = mapped_column(BIGINT, nullable=False)
+    healthy_delivered_messages: Mapped[int] = mapped_column(BIGINT, nullable=False)
+    modeled_latency_p50_ms: Mapped[float] = mapped_column(Double, nullable=False)
+    modeled_latency_p95_ms: Mapped[float] = mapped_column(Double, nullable=False)
+    modeled_latency_p99_ms: Mapped[float] = mapped_column(Double, nullable=False)
+    persistence_queue_high_water_mark: Mapped[int] = mapped_column(BIGINT, nullable=False)
+    simulated_mission_duration_ms: Mapped[int] = mapped_column(BIGINT, nullable=False)
+
+    run: Mapped[SimulationRun] = relationship(back_populates="telemetry_summary")
 
 
 class RunVehicle(Base):

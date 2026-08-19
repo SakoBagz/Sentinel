@@ -8,7 +8,8 @@ Date: 2026-08-12
 Replay is a read-only view of persisted historical telemetry and mission events. It
 does not rerun the simulation, reapply random failures, or depend on Redis surviving
 the original run. The replay represents what was durably persisted, including any
-configured telemetry downsampling.
+configured telemetry downsampling; it never reconstructs samples that were not
+persisted.
 
 ## Data source
 
@@ -53,7 +54,9 @@ opening the replay at the corresponding location.
 
 Replay must survive an application restart and remain usable when Redis/Valkey has
 been restarted. It must expose the actual stored telemetry sampling policy. If a run
-was downsampled to 2 Hz, replay cannot claim to show every 10 Hz sample.
+was downsampled to 2 Hz, replay cannot claim to show every 10 Hz sample. The
+persistence policy preserves the first and final relevant delivered sample per
+vehicle so replay remains anchored at both ends of the run.
 
 ## Query and performance rules
 

@@ -34,11 +34,18 @@ class ClientSession:
             self.queue.put_nowait(message)
         except asyncio.QueueFull:
             # A slow browser must not block the simulation or all other clients.
+            # Retain the newest state so the client converges after a burst.
             try:
                 self.queue.get_nowait()
-                self.queue.put_nowait({"type": "system.warning", "data": {"code": "CLIENT_QUEUE_DROPPED"}})
             except asyncio.QueueEmpty:
-                pass
+                return
+            metrics.increment("websocket_queue_drops_total")
+            try:
+                self.queue.put_nowait(message)
+            except asyncio.QueueFull:
+                # A concurrent sender may have filled the slot; dropping this
+                # transient message is preferable to blocking the broadcaster.
+                metrics.increment("websocket_queue_drops_total")
 
 
 class RealtimeHub:
@@ -84,8 +91,11 @@ class RealtimeHub:
                 session.enqueue({"type": transport_type, "data": message})
 
     async def _consume_run(self, run_id: UUID) -> None:
-        telemetry_id = "0-0"
-        events_id = "0-0"
+        # The snapshot REST endpoint hydrates current state. Starting at `$` keeps
+        # a new consumer from replaying the entire transient stream on connect or
+        # reconnect; PostgreSQL remains the source for historical replay.
+        telemetry_id = "$"
+        events_id = "$"
         try:
             while self._clients.get(run_id):
                 try:

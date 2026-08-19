@@ -13,8 +13,9 @@ docker compose up -d --build
 ```
 
 The host PostgreSQL port defaults to `55432` to avoid colliding with an existing local
-installation; the container still listens on `5432`. Local mode defaults to up to
-1,000 simulated vehicles, 10 Hz telemetry, and 2 Hz durable persistence.
+installation; the container still listens on `5432`. Local mode defaults to a 10 Hz
+simulation tick, per-vehicle telemetry configured at 10 Hz, and 2 Hz durable
+persistence. These are configuration defaults, not an integrated capacity claim.
 
 ## Hosted profile
 
@@ -47,6 +48,8 @@ PUBLIC_DEMO=false
 SIM_MAX_VEHICLES=1000
 DEFAULT_TELEMETRY_RATE_HZ=10
 TELEMETRY_PERSIST_RATE_HZ=2
+SIMULATION_TICK_HZ=10
+PERSISTENCE_QUEUE_MAXSIZE=1000
 MAX_MISSION_DURATION_MINUTES=15
 MAX_RUNS_PER_SESSION=5
 MAX_ANALYSIS_QUESTIONS_PER_RUN=10

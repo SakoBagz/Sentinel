@@ -1,22 +1,47 @@
 import asyncio
 import logging
-from collections import defaultdict
+from collections import deque
 from datetime import datetime, timezone
 from time import perf_counter
+from typing import Any
 from uuid import UUID
 
+from sqlalchemy import func, select
+
+from app.config import get_settings
 from app.domain.enums import EventSeverity, EventType, FailureType, MissionStatus, RunStatus
-from app.db.models.entities import MissionEvent
+from app.db.models.entities import MissionEvent, RunTelemetrySummary, TelemetrySample
 from app.db.session import SessionFactory
 from app.realtime.redis import redis_client
 from app.realtime.persistence import PersistenceWorker
 from app.realtime.streams import publish_event, publish_telemetry
 from app.observability.metrics import metrics
 from app.services.run_service import _mission_to_simulation, get_run, network_profiles_for_run
-from sentinel_sim.models import SimulationEvent, deterministic_id
+from sentinel_sim.models import SimulationEvent, SimulationOutputs, deterministic_id
 from sentinel_sim.engine import SimulationEngine
 
 logger = logging.getLogger(__name__)
+
+
+def _percentile(values: list[float], percentile: float) -> float:
+    if not values:
+        return 0.0
+    if len(values) == 1:
+        return values[0]
+    ordered = sorted(values)
+    rank = percentile * (len(ordered) - 1)
+    lower = int(rank)
+    upper = min(len(ordered) - 1, lower + 1)
+    return ordered[lower] + (ordered[upper] - ordered[lower]) * (rank - lower)
+
+
+def _percentile_summary(values: deque[float]) -> dict[str, float]:
+    samples = list(values)
+    return {
+        "p50": _percentile(samples, 0.50),
+        "p95": _percentile(samples, 0.95),
+        "p99": _percentile(samples, 0.99),
+    }
 
 
 class SimulationCoordinator:
@@ -27,6 +52,7 @@ class SimulationCoordinator:
         self._wake_events: dict[UUID, asyncio.Event] = {}
         self._paused: set[UUID] = set()
         self._stop_requested: set[UUID] = set()
+        self.last_run_diagnostics: dict[str, Any] | None = None
 
     async def start(self, run_id: UUID) -> None:
         task = self._tasks.get(run_id)
@@ -85,27 +111,72 @@ class SimulationCoordinator:
             return
         engine.clear_failure(failure_id, vehicle_id)
 
+    async def _publish_outputs(
+        self,
+        simulation: SimulationEngine,
+        outputs: SimulationOutputs,
+        persistence: PersistenceWorker,
+        diagnostics: dict[str, Any],
+    ) -> None:
+        metrics.increment("telemetry_messages_generated_total", len(outputs.generated_telemetry))
+        for envelope in outputs.telemetry:
+            publish_started = perf_counter()
+            record_id = await publish_telemetry(redis_client, envelope)
+            publish_duration_ms = (perf_counter() - publish_started) * 1000
+            diagnostics["redis_publish_durations"].append(publish_duration_ms)
+            metrics.observe("redis_publish_duration_ms", publish_duration_ms)
+            if record_id is None:
+                diagnostics["realtime_publish_errors"] += 1
+                metrics.increment("realtime_publish_errors_total")
+            # The live stream receives every delivered sample. The worker applies
+            # persistence downsampling after this publish boundary.
+            await persistence.enqueue(envelope)
+        metrics.increment("telemetry_messages_received_total", len(outputs.telemetry))
+        for event in outputs.events:
+            publish_started = perf_counter()
+            record_id = await publish_event(redis_client, event)
+            publish_duration_ms = (perf_counter() - publish_started) * 1000
+            diagnostics["redis_publish_durations"].append(publish_duration_ms)
+            metrics.observe("event_processing_latency_ms", publish_duration_ms)
+            if record_id is None:
+                diagnostics["realtime_publish_errors"] += 1
+                metrics.increment("realtime_publish_errors_total")
+            await persistence.enqueue(event)
+        for latency_ms in simulation.network.take_last_delivery_latencies():
+            metrics.observe("telemetry_modeled_network_latency_ms", latency_ms)
+
     async def _execute(self, run_id: UUID) -> None:
         persistence: PersistenceWorker | None = None
+        simulation: SimulationEngine | None = None
+        diagnostics: dict[str, Any] = {
+            "tick_durations": deque(maxlen=10_000),
+            "redis_publish_durations": deque(maxlen=10_000),
+            "realtime_publish_errors": 0,
+        }
         try:
             async with SessionFactory() as session:
                 run = await get_run(session, run_id)
+                settings = get_settings()
+                tick_hz = float(run.configuration.get("simulation_tick_hz", settings.simulation_tick_hz))
+                persist_rate_hz = float(
+                    run.configuration.get("telemetry_persist_rate_hz", settings.telemetry_persist_rate_hz)
+                )
+                queue_maxsize = int(
+                    run.configuration.get("persistence_queue_maxsize", settings.persistence_queue_maxsize)
+                )
                 simulation = SimulationEngine(
                     _mission_to_simulation(run.mission, run),
                     run.id,
                     run.random_seed,
-                    tick_hz=10.0,
-                    telemetry_rate_hz=10.0,
+                    tick_hz=tick_hz,
                     network_profiles=network_profiles_for_run(run),
+                    retain_history=False,
                 )
                 self._engines[run_id] = simulation
                 metrics.set_gauge("simulation_vehicle_count", len(simulation.vehicles))
                 for failure_id, vehicle_id, failure_type, duration_ms, configuration in self._pending_failures.pop(run_id, []):
                     simulation.inject_failure(failure_id, vehicle_id, failure_type, duration_ms, configuration)
-                generated_cursor = 0
-                delivered_cursor = 0
-                sent_events = 0
-                persistence = PersistenceWorker()
+                persistence = PersistenceWorker(maxsize=queue_maxsize, persist_rate_hz=persist_rate_hz)
                 await persistence.start()
                 try:
                     while not simulation.is_complete() and simulation.clock.sim_time_ms < simulation.mission.duration_limit_ms:
@@ -119,28 +190,11 @@ class SimulationCoordinator:
                             break
                         tick_started = perf_counter()
                         simulation.tick()
-                        metrics.observe("simulation_tick_duration_ms", (perf_counter() - tick_started) * 1000)
-                        generated_batch = simulation.generated_telemetry[generated_cursor:]
-                        metrics.increment("telemetry_messages_generated_total", len(generated_batch))
-                        generated_cursor = len(simulation.generated_telemetry)
-                        delivered_batch = simulation.telemetry[delivered_cursor:]
-                        metrics.increment("telemetry_messages_received_total", len(delivered_batch))
-                        for envelope in delivered_batch:
-                            publish_started = perf_counter()
-                            record_id = await publish_telemetry(redis_client, envelope)
-                            metrics.observe("telemetry_end_to_end_latency_ms", (perf_counter() - publish_started) * 1000)
-                            if record_id is None:
-                                metrics.increment("realtime_publish_errors_total")
-                            await persistence.enqueue(envelope)
-                        delivered_cursor = len(simulation.telemetry)
-                        for event in simulation.events[sent_events:]:
-                            publish_started = perf_counter()
-                            record_id = await publish_event(redis_client, event)
-                            metrics.observe("event_processing_latency_ms", (perf_counter() - publish_started) * 1000)
-                            if record_id is None:
-                                metrics.increment("realtime_publish_errors_total")
-                            await persistence.enqueue(event)
-                        sent_events = len(simulation.events)
+                        tick_duration_ms = (perf_counter() - tick_started) * 1000
+                        diagnostics["tick_durations"].append(tick_duration_ms)
+                        metrics.observe("simulation_tick_duration_ms", tick_duration_ms)
+                        outputs = simulation.drain_outputs()
+                        await self._publish_outputs(simulation, outputs, persistence, diagnostics)
                         wake.clear()
                         try:
                             await asyncio.wait_for(
@@ -150,47 +204,20 @@ class SimulationCoordinator:
                         except asyncio.TimeoutError:
                             pass
                     simulation.flush_pending()
-                    delivered_batch = simulation.telemetry[delivered_cursor:]
-                    metrics.increment("telemetry_messages_received_total", len(delivered_batch))
-                    for envelope in delivered_batch:
-                        publish_started = perf_counter()
-                        record_id = await publish_telemetry(redis_client, envelope)
-                        metrics.observe("telemetry_end_to_end_latency_ms", (perf_counter() - publish_started) * 1000)
-                        if record_id is None:
-                            metrics.increment("realtime_publish_errors_total")
-                        await persistence.enqueue(envelope)
-                    delivered_cursor = len(simulation.telemetry)
-                    for event in simulation.events[sent_events:]:
-                        publish_started = perf_counter()
-                        record_id = await publish_event(redis_client, event)
-                        metrics.observe("event_processing_latency_ms", (perf_counter() - publish_started) * 1000)
-                        if record_id is None:
-                            metrics.increment("realtime_publish_errors_total")
-                        await persistence.enqueue(event)
+                    await self._publish_outputs(simulation, simulation.drain_outputs(), persistence, diagnostics)
+                    await persistence.finalize_telemetry()
                 finally:
                     await persistence.stop()
-                generated_by_vehicle: dict[UUID, set[int]] = defaultdict(set)
-                delivered_by_vehicle: dict[UUID, list[int]] = defaultdict(list)
-                for envelope in simulation.generated_telemetry:
-                    generated_by_vehicle[envelope.vehicle_id].add(envelope.sequence)
-                for envelope in simulation.telemetry:
-                    delivered_by_vehicle[envelope.vehicle_id].append(envelope.sequence)
-                missing = sum(
-                    len(sequences - set(delivered_by_vehicle.get(vehicle_id, [])))
-                    for vehicle_id, sequences in generated_by_vehicle.items()
+                network_stats = simulation.network.statistics()
+                metrics.increment("telemetry_messages_missing_total", network_stats.missing_messages)
+                metrics.increment("telemetry_messages_duplicate_total", network_stats.duplicate_messages)
+                metrics.increment("telemetry_messages_out_of_order_total", network_stats.out_of_order_messages)
+                persisted_messages = int(
+                    await session.scalar(
+                        select(func.count(TelemetrySample.id)).where(TelemetrySample.run_id == run_id)
+                    )
+                    or 0
                 )
-                duplicates = sum(
-                    len(sequences) - len(set(sequences)) for sequences in delivered_by_vehicle.values()
-                )
-                out_of_order = sum(
-                    1
-                    for sequences in delivered_by_vehicle.values()
-                    for left, right in zip(sequences, sequences[1:])
-                    if right < left
-                )
-                metrics.increment("telemetry_messages_missing_total", missing)
-                metrics.increment("telemetry_messages_duplicate_total", duplicates)
-                metrics.increment("telemetry_messages_out_of_order_total", out_of_order)
                 stop_requested = run_id in self._stop_requested or run.status is RunStatus.ABORTED
                 run.status = RunStatus.ABORTED if stop_requested else RunStatus.COMPLETED if simulation.is_complete() else RunStatus.ABORTED
                 run.completed_at = datetime.now(timezone.utc)
@@ -220,6 +247,24 @@ class SimulationCoordinator:
                             payload=lifecycle_event.payload,
                         )
                     )
+                session.add(
+                    RunTelemetrySummary(
+                        run_id=run.id,
+                        generated_messages=network_stats.generated_messages,
+                        delivered_messages=network_stats.delivered_messages,
+                        unique_delivered_messages=network_stats.unique_delivered_messages,
+                        persisted_messages=persisted_messages,
+                        missing_messages=network_stats.missing_messages,
+                        duplicate_messages=network_stats.duplicate_messages,
+                        out_of_order_messages=network_stats.out_of_order_messages,
+                        healthy_delivered_messages=network_stats.healthy_delivered_messages,
+                        modeled_latency_p50_ms=network_stats.modeled_latency_p50_ms,
+                        modeled_latency_p95_ms=network_stats.modeled_latency_p95_ms,
+                        modeled_latency_p99_ms=network_stats.modeled_latency_p99_ms,
+                        persistence_queue_high_water_mark=persistence.queue_high_water_mark,
+                        simulated_mission_duration_ms=simulation.clock.sim_time_ms,
+                    )
+                )
                 await session.commit()
                 if lifecycle_event is not None:
                     await publish_event(redis_client, lifecycle_event)
@@ -239,6 +284,15 @@ class SimulationCoordinator:
             except Exception:
                 logger.exception("could not mark failed run aborted", extra={"run_id": str(run_id)})
         finally:
+            diagnostics["tick_latency_ms"] = _percentile_summary(diagnostics["tick_durations"])
+            diagnostics["redis_publish_duration_ms"] = _percentile_summary(diagnostics["redis_publish_durations"])
+            diagnostics["database_batch_duration_ms"] = (
+                persistence.batch_duration_percentiles if persistence is not None else {"p50": 0.0, "p95": 0.0, "p99": 0.0}
+            )
+            diagnostics["errors"] = diagnostics["realtime_publish_errors"] + (1 if persistence and persistence.error else 0)
+            diagnostics.pop("tick_durations", None)
+            diagnostics.pop("redis_publish_durations", None)
+            self.last_run_diagnostics = diagnostics
             self._engines.pop(run_id, None)
             self._pending_failures.pop(run_id, None)
             self._wake_events.pop(run_id, None)

@@ -1,6 +1,7 @@
 import heapq
 import math
 from dataclasses import dataclass, field
+from collections import deque
 from typing import Any
 from uuid import UUID
 
@@ -8,6 +9,18 @@ from app.domain.enums import FailureType
 
 from sentinel_sim.models import TelemetryEnvelope
 from sentinel_sim.random import SeededRandom
+
+
+def _percentile(values: list[float], percentile: float) -> float:
+    if not values:
+        return 0.0
+    if len(values) == 1:
+        return values[0]
+    ordered = sorted(values)
+    rank = percentile * (len(ordered) - 1)
+    lower = int(rank)
+    upper = min(len(ordered) - 1, lower + 1)
+    return ordered[lower] + (ordered[upper] - ordered[lower]) * (rank - lower)
 
 
 @dataclass(frozen=True)
@@ -45,6 +58,27 @@ class FailureWindow:
         return self.start_sim_time_ms <= sim_time_ms < self.end_sim_time_ms
 
 
+@dataclass(frozen=True)
+class NetworkStatistics:
+    """Incremental network accounting for one simulation run.
+
+    The latency sample window is intentionally bounded. Message counts are scalar
+    counters, so the runtime never needs to retain the telemetry history to produce
+    delivery-integrity metrics.
+    """
+
+    generated_messages: int
+    delivered_messages: int
+    unique_delivered_messages: int
+    missing_messages: int
+    duplicate_messages: int
+    out_of_order_messages: int
+    healthy_delivered_messages: int
+    modeled_latency_p50_ms: float
+    modeled_latency_p95_ms: float
+    modeled_latency_p99_ms: float
+
+
 @dataclass
 class _VehicleNetworkState:
     profile: NetworkConfiguration
@@ -54,7 +88,7 @@ class _VehicleNetworkState:
     recovery_ticks: int = 0
     automatic_disconnect_active: bool = False
     failures: list[FailureWindow] = field(default_factory=list)
-    pending: list[tuple[int, int, TelemetryEnvelope]] = field(default_factory=list)
+    pending: list[tuple[int, int, TelemetryEnvelope, bool]] = field(default_factory=list)
 
 
 class NetworkSimulator:
@@ -63,11 +97,28 @@ class NetworkSimulator:
     stale_threshold_ms = 1_000
     disconnect_threshold_ms = 3_000
 
-    def __init__(self, random: SeededRandom, profiles: dict[UUID, NetworkConfiguration] | None = None) -> None:
+    def __init__(
+        self,
+        random: SeededRandom,
+        profiles: dict[UUID, NetworkConfiguration] | None = None,
+        *,
+        latency_sample_limit: int = 10_000,
+    ) -> None:
+        if latency_sample_limit <= 0:
+            raise ValueError("latency_sample_limit must be positive")
         self.random = random
         self.profiles = profiles or {}
         self.vehicles: dict[UUID, _VehicleNetworkState] = {}
         self._ordinal = 0
+        self._generated_messages = 0
+        self._delivered_messages = 0
+        self._unique_delivered_messages = 0
+        self._duplicate_messages = 0
+        self._out_of_order_messages = 0
+        self._healthy_delivered_messages = 0
+        self._last_delivered_sequence: dict[UUID, int] = {}
+        self._latency_samples: deque[float] = deque(maxlen=latency_sample_limit)
+        self._last_delivery_latencies: list[float] = []
 
     def _state(self, vehicle_id: UUID) -> _VehicleNetworkState:
         return self.vehicles.setdefault(vehicle_id, _VehicleNetworkState(self.profiles.get(vehicle_id, NetworkConfiguration())))
@@ -163,6 +214,7 @@ class NetworkSimulator:
 
     def submit(self, envelope: TelemetryEnvelope) -> None:
         state = self._state(envelope.vehicle_id)
+        self._generated_messages += 1
         effective, blackout, _ = self._effective(envelope.vehicle_id, envelope.sim_time_ms)
         if blackout or state.automatic_disconnect_active:
             return
@@ -170,23 +222,55 @@ class NetworkSimulator:
             return
         latency = max(0.0, effective.base_latency_ms + self.random.uniform(-effective.jitter_ms, effective.jitter_ms))
         self._ordinal += 1
-        heapq.heappush(state.pending, (envelope.sim_time_ms + round(latency), self._ordinal, envelope))
+        heapq.heappush(state.pending, (envelope.sim_time_ms + round(latency), self._ordinal, envelope, False))
         if self.random.random() < effective.duplicate_percent / 100:
             self._ordinal += 1
             duplicate_latency = max(0.0, latency + self.random.uniform(0, effective.jitter_ms))
-            heapq.heappush(state.pending, (envelope.sim_time_ms + round(duplicate_latency), self._ordinal, envelope))
+            heapq.heappush(
+                state.pending,
+                (envelope.sim_time_ms + round(duplicate_latency), self._ordinal, envelope, True),
+            )
+
+    def _record_delivery(
+        self,
+        state: _VehicleNetworkState,
+        scheduled_delivery_ms: int,
+        delivered_at_ms: int,
+        envelope: TelemetryEnvelope,
+        is_duplicate: bool,
+    ) -> float:
+        self._delivered_messages += 1
+        if is_duplicate:
+            self._duplicate_messages += 1
+        else:
+            self._unique_delivered_messages += 1
+        previous_sequence = self._last_delivered_sequence.get(envelope.vehicle_id)
+        if previous_sequence is not None and envelope.sequence < previous_sequence:
+            self._out_of_order_messages += 1
+        self._last_delivered_sequence[envelope.vehicle_id] = envelope.sequence
+        if envelope.payload.get("communications_state") == "HEALTHY":
+            self._healthy_delivered_messages += 1
+        modeled_latency_ms = max(0.0, float(scheduled_delivery_ms - envelope.sim_time_ms))
+        self._latency_samples.append(modeled_latency_ms)
+        state.last_delivery_ms = delivered_at_ms
+        if state.recovery_ticks > 0:
+            state.recovery_ticks -= 1
+        return modeled_latency_ms
 
     def drain(self, sim_time_ms: int) -> list[TelemetryEnvelope]:
         delivered: list[TelemetryEnvelope] = []
+        self._last_delivery_latencies = []
         for vehicle_id, state in self.vehicles.items():
             if state.state == "DISCONNECTED":
                 continue
             while state.pending and state.pending[0][0] <= sim_time_ms:
-                _, _, envelope = heapq.heappop(state.pending)
+                scheduled_delivery_ms, _, envelope, is_duplicate = heapq.heappop(state.pending)
                 delivered.append(envelope)
-                state.last_delivery_ms = sim_time_ms
-                if state.recovery_ticks > 0:
-                    state.recovery_ticks -= 1
+                self._last_delivery_latencies.append(
+                    self._record_delivery(
+                        state, scheduled_delivery_ms, sim_time_ms, envelope, is_duplicate
+                    )
+                )
         return delivered
 
     def flush(self, sim_time_ms: int) -> list[TelemetryEnvelope]:
@@ -198,6 +282,7 @@ class NetworkSimulator:
         never available to the ground consumer.
         """
         delivered: list[TelemetryEnvelope] = []
+        self._last_delivery_latencies = []
         for state in self.vehicles.values():
             blackout_active = any(
                 window.failure_type is FailureType.COMMUNICATIONS_BLACKOUT and window.active(sim_time_ms)
@@ -206,10 +291,35 @@ class NetworkSimulator:
             if blackout_active or state.automatic_disconnect_active:
                 continue
             while state.pending:
-                _, _, envelope = heapq.heappop(state.pending)
+                scheduled_delivery_ms, _, envelope, is_duplicate = heapq.heappop(state.pending)
                 delivered.append(envelope)
-                state.last_delivery_ms = sim_time_ms
+                self._last_delivery_latencies.append(
+                    self._record_delivery(
+                        state, scheduled_delivery_ms, sim_time_ms, envelope, is_duplicate
+                    )
+                )
         return delivered
+
+    def take_last_delivery_latencies(self) -> tuple[float, ...]:
+        """Return and clear only the most recent drain/flush latency batch."""
+        values = tuple(self._last_delivery_latencies)
+        self._last_delivery_latencies = []
+        return values
+
+    def statistics(self) -> NetworkStatistics:
+        latency_values = list(self._latency_samples)
+        return NetworkStatistics(
+            generated_messages=self._generated_messages,
+            delivered_messages=self._delivered_messages,
+            unique_delivered_messages=self._unique_delivered_messages,
+            missing_messages=max(0, self._generated_messages - self._unique_delivered_messages),
+            duplicate_messages=self._duplicate_messages,
+            out_of_order_messages=self._out_of_order_messages,
+            healthy_delivered_messages=self._healthy_delivered_messages,
+            modeled_latency_p50_ms=_percentile(latency_values, 0.50),
+            modeled_latency_p95_ms=_percentile(latency_values, 0.95),
+            modeled_latency_p99_ms=_percentile(latency_values, 0.99),
+        )
 
     def pending_count(self) -> int:
         return sum(len(state.pending) for state in self.vehicles.values())

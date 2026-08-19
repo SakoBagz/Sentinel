@@ -17,7 +17,7 @@ from app.db.models.entities import (
 )
 from app.domain.enums import EventSeverity, EventType, MissionStatus, RunStatus
 from app.services import mission_service
-from app.services.public_limits import ensure_run_allowed
+from app.services.public_limits import ensure_run_allowed, validate_telemetry_rate
 from sentinel_sim.models import MissionConfiguration, SimulationEvent, VehicleConfiguration, WaypointConfiguration, deterministic_id
 from sentinel_sim.navigation import Position
 from sentinel_sim.network import NetworkConfiguration
@@ -198,6 +198,11 @@ async def create_run(session: AsyncSession, mission_id: UUID, payload: RunCreate
     except ValueError as exc:
         raise RunConflict(str(exc)) from exc
     settings = get_settings()
+    for membership in mission.vehicle_memberships:
+        try:
+            validate_telemetry_rate(membership.vehicle_definition.telemetry_rate_hz)
+        except ValueError as exc:
+            raise RunConflict(str(exc)) from exc
     duration_minutes = payload.duration_limit_minutes or settings.max_mission_duration_minutes
     if duration_minutes > settings.max_mission_duration_minutes:
         raise RunConflict(f"Mission duration cannot exceed {settings.max_mission_duration_minutes} minutes")
@@ -210,6 +215,9 @@ async def create_run(session: AsyncSession, mission_id: UUID, payload: RunCreate
         configuration={
             "mission_status_at_creation": mission.status.value,
             "duration_limit_ms": duration_minutes * 60 * 1000,
+            "simulation_tick_hz": settings.simulation_tick_hz,
+            "telemetry_persist_rate_hz": settings.telemetry_persist_rate_hz,
+            "persistence_queue_maxsize": settings.persistence_queue_maxsize,
             "session_key": session_id,
         },
     )

@@ -29,10 +29,12 @@ code, perform WebSocket operations, or synchronously write PostgreSQL records.
 
 ## Simulation clock
 
-The local default is a 10 Hz tick and 10 Hz telemetry generation. Public demo mode
-uses 5 Hz telemetry while tick rate remains independently configurable. The clock
-tracks integer `sim_time_ms`, advances by the configured tick interval, and can run at
-a wall-clock speed multiplier. Persistence frequency is independent of both.
+The local default is a 10 Hz tick. Each vehicle emits at its configured telemetry
+rate; a rate above the simulation tick is rejected. Public demo mode limits the
+configured rate to 5 Hz while tick rate remains independently configurable. The
+clock tracks integer `sim_time_ms`, and a deterministic simulation-time accumulator
+drives emission, independent of wall-clock speed. Persistence frequency is
+independent of both.
 
 The run stores `random_seed` and `simulation_speed`. Speed changes scheduling only; it
 must not change simulation time steps or the sequence of seeded random draws.
@@ -52,7 +54,7 @@ Each tick performs the following operations in order:
    modifier.
 9. Mark a waypoint reached when distance is at or below its arrival radius.
 10. Evaluate explicit vehicle-state transitions.
-11. Generate telemetry at the vehicle's configured rate.
+11. Generate telemetry at the vehicle's configured rate using simulation time.
 12. Apply network impairment to generated messages.
 13. Deliver messages whose simulated latency has elapsed.
 14. Generate operational events for transitions, thresholds, failures, and errors.
@@ -114,9 +116,12 @@ generated message:
 4. Queue delivery at simulated time plus latency.
 5. Deliver when the scheduled simulated time arrives.
 
-The simulator continues state updates while messages are dropped or delayed. A
-duplicate retains the same sequence and event identity. A delayed message may be
-observed out of order by consumers and must exercise their sequence handling.
+The simulator continues state updates while messages are dropped or delayed. The
+network runtime tracks generated originals, delivered/unique/duplicate deliveries,
+missing originals, out-of-order arrivals, healthy deliveries, and a bounded modeled
+latency sample window incrementally. A duplicate retains the same sequence and event
+identity. A delayed message may be observed out of order by consumers and must
+exercise their sequence handling.
 
 Accepted packets that remain in the delivery queue when a run reaches a terminal
 state are flushed without advancing simulation time. Packets suppressed by an active

@@ -31,3 +31,19 @@ def test_public_demo_enforces_vehicle_rate_and_run_limits(client) -> None:
         assert second.status_code == 409
     finally:
         settings.public_demo, settings.sim_max_vehicles, settings.max_runs_per_session = previous
+
+
+def test_configured_simulation_tick_rejects_higher_vehicle_rate(client) -> None:
+    settings = get_settings()
+    previous = settings.simulation_tick_hz
+    settings.simulation_tick_hz = 5
+    try:
+        mission = client.post("/api/missions", json={"name": "Tick rate limit"}).json()
+        response = client.post(
+            f"/api/missions/{mission['id']}/vehicles",
+            json={"callsign": "UAV-TICK-LIMIT", "telemetry_rate_hz": 10},
+        )
+        assert response.status_code == 409
+        assert "simulation tick rate" in response.json()["error"]["message"]
+    finally:
+        settings.simulation_tick_hz = previous

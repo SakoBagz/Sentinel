@@ -17,6 +17,7 @@ class Settings(BaseSettings):
     default_telemetry_rate_hz: float = Field(default=10.0, gt=0)
     telemetry_persist_rate_hz: float = Field(default=2.0, gt=0)
     simulation_tick_hz: float = Field(default=10.0, gt=0)
+    persistence_queue_maxsize: int = Field(default=1_000, ge=1)
     waypoint_arrival_radius_m: float = Field(default=10.0, gt=0)
     max_mission_duration_minutes: int = Field(default=15, ge=1)
     max_runs_per_session: int = Field(default=5, ge=1)

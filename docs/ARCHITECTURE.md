@@ -141,3 +141,5 @@ domain logic.
 6. Replay uses persisted telemetry only.
 7. Analysis has no mutation capability.
 8. Hosted limits are enforced in the backend.
+9. Per-run delivery and modeled-latency summaries are computed incrementally and
+   persisted independently of telemetry downsampling.

@@ -29,11 +29,14 @@ state may disappear, but completed durable mission history must remain available
 
 ## Consumer behavior
 
-The current MVP uses per-run Redis `XREAD` offsets for the WebSocket broadcaster and a
-separate bounded persistence worker. Each consumer is restart-safe:
+The current implementation uses per-run Redis `XREAD` offsets for the WebSocket
+broadcaster and a separate bounded persistence worker. New realtime consumers start
+at `$`, after the PostgreSQL snapshot boundary, so they do not replay the entire
+transient stream:
 
 - broadcaster reconnects and cleans up dead WebSocket subscriptions;
-- persistence worker batches and retries conflict-safe writes;
+- persistence worker batches, applies simulation-time downsampling, and retries
+  conflict-safe writes with backpressure rather than dropping durable items;
 - metrics processor records processing lag and failure counts;
 - no consumer assumes that stream delivery is exactly once.
 
@@ -101,6 +104,12 @@ On reconnect, the client restores topic subscriptions and hydrates current state
 are obtained from REST, not by assuming that a disconnected WebSocket retained all
 messages.
 
+The live stream receives every telemetry sample delivered by the network simulator.
+PostgreSQL receives the configured deterministic downsampled subset, plus every
+mission event and the first/final relevant sample for each vehicle. Realtime client
+queues are bounded; when full, the oldest queued live message is discarded and the
+newest message is retained. Queue drops are counted and never block other consumers.
+
 ## Browser live store
 
 The live telemetry store is conceptually `Map<VehicleId, VehicleTelemetry>`. For each
@@ -125,17 +134,20 @@ server may batch across vehicles but must not mutate sequence numbers.
 
 ## Realtime metrics
 
-Instrument at least generated, received, duplicate, missing, and out-of-order message
-counters; active WebSocket connections; end-to-end telemetry latency; event processing
-latency; simulation tick duration; stream consumer lag; and database batch-write
-duration.
+Instrument generated, delivered, duplicate, missing, and out-of-order message
+counters; active WebSocket connections; modeled network latency; Redis publish
+duration; event processing latency; simulation tick duration; stream consumer lag;
+database batch-write duration; persistence queue depth/high-water; and slow-client
+queue drops. Modeled latency is simulation emission to scheduled delivery time, not
+Redis publish duration.
 
 ## Remaining realtime hardening
 
 - Choose Redis consumer-group names and pending-entry reclaim policy.
 - WebSocket subscriptions are restored on reconnect; changing subscriptions after the
   initial subscribe is deferred until a product surface needs it.
-- Set maximum per-message and per-batch sizes before Phase 4.
+- Consumer groups and multi-instance pending-entry reclaim remain future deployment
+  work; the single-process local broadcaster uses bounded per-client queues.
 
 The reconnect snapshot endpoint and response shape are implemented as
 `GET /api/runs/{run_id}/snapshot` and return the latest bounded telemetry state for

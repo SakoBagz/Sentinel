@@ -113,6 +113,13 @@ Load tests are separate from ordinary CI and are described in `PERFORMANCE.md`.
 Benchmark output is machine-readable and includes environment metadata. No performance
 number is published until produced by the benchmark script.
 
+The reliability regression suite also covers mixed per-vehicle telemetry rates,
+simulation-time determinism, deterministic persistence downsampling with first/final
+samples, all-event durability, bounded queue backpressure and shutdown, live-run
+output draining, incremental delivery accounting, summary-based metrics, live Redis
+reconnect offsets, slow-client overflow, PostgreSQL-only replay, and configured
+vehicle/rate/run limits.
+
 ## Remaining test-plan hardening
 
 - Python tests use pytest; strict frontend TypeScript, Vitest, ESLint, and the
