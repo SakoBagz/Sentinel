@@ -18,3 +18,4 @@ benchmark-results/*.json
 benchmark-results/*.md
 *.log
 .DS_Store
+AGENTS.md
