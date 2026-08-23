@@ -12,7 +12,7 @@ import { StatusBadge, statusTone } from "@/components/status-badge";
 import { addVehicle, addWaypoint, createRun, deleteWaypoint, generatePattern, getMission, Mission, updateMission, updateWaypoint, Waypoint } from "@/lib/api";
 import { scenarioLabel } from "@/lib/mission-catalog";
 import { evaluateMissionReadiness } from "@/lib/mission-readiness";
-import { createOpsMap, makeMarkerInteractive, updateLineGeoJson, updateWhenStyleReady, type OpsLine } from "@/lib/ops-map";
+import { createOpsMap, createWaypointMarkerElement, fitCoordinates, makeMarkerInteractive, OPS_ROUTE_PAINT, updateLineGeoJson, updateWhenStyleReady, type OpsLine } from "@/lib/ops-map";
 
 type Props = { missionId: string };
 
@@ -49,6 +49,7 @@ export function MissionPlanner({ missionId }: Props) {
   const selectedVehicleRef = useRef<string | null>(null);
   const missionRef = useRef<Mission | null>(null);
   const markersRef = useRef<Marker[]>([]);
+  const fittedRef = useRef(false);
   const [mission, setMission] = useState<Mission | null>(null);
   const [selectedVehicle, setSelectedVehicle] = useState("");
   const [selectedWaypointId, setSelectedWaypointId] = useState<string | null>(null);
@@ -149,12 +150,17 @@ export function MissionPlanner({ missionId }: Props) {
     for (const marker of markersRef.current) marker.remove();
     markersRef.current = mission.waypoints.map((waypoint) => {
       const callsign = mission.vehicles.find((vehicle) => vehicle.id === waypoint.vehicle_id)?.callsign ?? "Unassigned UAV";
+      const shortLabel = `${callsign} · WP${waypoint.sequence + 1}`;
       const waypointLabel = `${callsign} · Waypoint ${waypoint.sequence + 1} · ${waypoint.action}`;
-      const marker = new Marker({ color: "#d9dde1" })
-        .setDraggable(true)
+      const marker = new Marker({
+        element: createWaypointMarkerElement({ label: shortLabel, selected: false }),
+        draggable: true,
+        anchor: "center",
+      })
         .setLngLat([waypoint.longitude, waypoint.latitude])
-        .setPopup(new Popup().setText(waypointLabel))
+        .setPopup(new Popup({ closeButton: false, offset: 14 }).setText(waypointLabel))
         .addTo(map);
+      marker.getElement().dataset.waypointId = waypoint.id;
       const selectMarker = () => {
         setSelectedWaypointId(waypoint.id);
         setSelectedVehicle(waypoint.vehicle_id ?? "");
@@ -172,7 +178,27 @@ export function MissionPlanner({ missionId }: Props) {
       });
       return marker;
     });
+
+    if (!fittedRef.current && mission.waypoints.length > 0) {
+      const applyFit = () => {
+        fitCoordinates(
+          map,
+          mission.waypoints.map((waypoint) => [waypoint.longitude, waypoint.latitude]),
+          { padding: 70, maxZoom: 13, duration: 0 },
+        );
+        fittedRef.current = true;
+      };
+      updateWhenStyleReady(map, applyFit);
+    }
   }, [mission]);
+
+  useEffect(() => {
+    for (const marker of markersRef.current) {
+      const element = marker.getElement();
+      const selected = element.dataset.waypointId === selectedWaypointId;
+      element.classList.toggle("selected", selected);
+    }
+  }, [selectedWaypointId, mission]);
 
   useEffect(() => {
     const map = mapRef.current;
@@ -190,7 +216,7 @@ export function MissionPlanner({ missionId }: Props) {
       updateLineGeoJson(map, {
         sourceId: "sentinel-planner-routes",
         lines,
-        paint: { "line-color": "#d9dde1", "line-width": 3, "line-opacity": 0.82 },
+        paint: OPS_ROUTE_PAINT,
       });
     };
     return updateWhenStyleReady(map, updateRoutes);
