@@ -94,8 +94,13 @@ or a selected profile. `scripts/load_test.py` exposes the requested single-profi
 CLI. Both report generated, delivered, persisted, duplicate, missing, out-of-order,
 throughput, error, CPU, memory, and p50/p95/p99 values. The default harness is an
 in-process simulator plus idempotent sink, so its output is explicitly not a
-PostgreSQL/Redis or cloud-capacity claim. JSON and Markdown output are written only
-when the harness is run; measured result files are intentionally not committed.
+PostgreSQL/Redis or cloud-capacity claim.
+
+Checked-in measured artifacts live under `benchmark-results/` (`SUMMARY.md` plus
+`inprocess-*uav.json`). They disclose environment metadata from the harness. Re-run
+locally to refresh; never invent numbers. Integrated Redis/Postgres results are only
+committed when `scripts/integrated_benchmark.py` has been executed against a live
+Compose stack.
 
 The API also exposes `/api/metrics` as a Prometheus-compatible developer diagnostic
 surface. Runtime counters are populated by the coordinator, WebSocket hub, and

@@ -4,9 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import MissionCreate, MissionList, MissionRead, MissionUpdate, VehicleRead, WaypointRead
+from app.auth import AuthPrincipal, require_operator
 from app.db.models.entities import Mission
 from app.db.session import get_db_session
-from app.services import mission_service
+from app.services import audit_service, mission_service
 
 router = APIRouter(prefix="/missions", tags=["missions"])
 
@@ -43,8 +44,21 @@ def to_mission_read(mission: Mission) -> MissionRead:
 
 
 @router.post("", response_model=MissionRead, status_code=status.HTTP_201_CREATED)
-async def create_mission(payload: MissionCreate, session: AsyncSession = Depends(get_db_session)) -> MissionRead:
+async def create_mission(
+    payload: MissionCreate,
+    session: AsyncSession = Depends(get_db_session),
+    principal: AuthPrincipal = Depends(require_operator),
+) -> MissionRead:
     mission = await mission_service.create_mission(session, payload)
+    await audit_service.record_audit(
+        session,
+        principal=principal,
+        action="mission.create",
+        resource_type="mission",
+        resource_id=mission.id,
+        details={"name": mission.name},
+    )
+    await session.commit()
     return to_mission_read(mission)
 
 
@@ -69,10 +83,21 @@ async def get_mission(mission_id: UUID, session: AsyncSession = Depends(get_db_s
 
 @router.patch("/{mission_id}", response_model=MissionRead)
 async def update_mission(
-    mission_id: UUID, payload: MissionUpdate, session: AsyncSession = Depends(get_db_session)
+    mission_id: UUID,
+    payload: MissionUpdate,
+    session: AsyncSession = Depends(get_db_session),
+    principal: AuthPrincipal = Depends(require_operator),
 ) -> MissionRead:
     try:
         mission = await mission_service.update_mission(session, mission_id, payload)
+        await audit_service.record_audit(
+            session,
+            principal=principal,
+            action="mission.update",
+            resource_type="mission",
+            resource_id=mission.id,
+        )
+        await session.commit()
         return to_mission_read(mission)
     except mission_service.MissionNotFound as exc:
         raise HTTPException(status_code=404, detail="Mission not found") from exc
@@ -81,9 +106,21 @@ async def update_mission(
 
 
 @router.delete("/{mission_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_mission(mission_id: UUID, session: AsyncSession = Depends(get_db_session)) -> Response:
+async def delete_mission(
+    mission_id: UUID,
+    session: AsyncSession = Depends(get_db_session),
+    principal: AuthPrincipal = Depends(require_operator),
+) -> Response:
     try:
         await mission_service.delete_mission(session, mission_id)
+        await audit_service.record_audit(
+            session,
+            principal=principal,
+            action="mission.delete",
+            resource_type="mission",
+            resource_id=mission_id,
+        )
+        await session.commit()
     except mission_service.MissionNotFound as exc:
         raise HTTPException(status_code=404, detail="Mission not found") from exc
     except mission_service.MissionConflict as exc:

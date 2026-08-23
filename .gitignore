@@ -14,8 +14,11 @@ node_modules/
 out/
 apps/web/test-results/
 *.tsbuildinfo
-benchmark-results/*.json
-benchmark-results/*.md
+# Ignore ephemeral harness dumps; keep checked-in measured summaries.
+benchmark-results/benchmark-*.json
+benchmark-results/benchmark-summary-*.md
+!benchmark-results/SUMMARY.md
+!benchmark-results/inprocess-*.json
 *.log
 .DS_Store
 AGENTS.md

@@ -405,6 +405,8 @@ export function OverviewField() {
       const height = Math.max(1, host.clientHeight);
       camera.aspect = width / height;
       camera.updateProjectionMatrix();
+      system.position.x = camera.aspect > 1.15 ? Math.min(1.35, camera.aspect * 0.56) : 0;
+      system.scale.setScalar(camera.aspect > 1.15 ? 1 : 0.72);
       renderer.setSize(width, height, false);
     };
     resize();

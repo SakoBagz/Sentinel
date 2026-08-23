@@ -34,6 +34,12 @@ class Settings(BaseSettings):
         default=None,
         validation_alias=AliasChoices("ANALYSIS_API_KEY", "GEMINI_API_KEY"),
     )
+    auth_secret: str = Field(
+        default="sentinel-dev-auth-secret-change-me",
+        min_length=16,
+        validation_alias=AliasChoices("AUTH_SECRET"),
+    )
+    auth_token_ttl_hours: int = Field(default=24, ge=1, le=168)
 
     model_config = SettingsConfigDict(
         env_file=".env",

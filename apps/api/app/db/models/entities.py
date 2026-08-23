@@ -123,6 +123,7 @@ class NetworkProfile(Base):
 
 class SimulationRun(Base):
     __tablename__ = "simulation_runs"
+    __table_args__ = (Index("ix_simulation_runs_session_key", "session_key"),)
 
     id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
     mission_id: Mapped[UUID] = mapped_column(ForeignKey("missions.id"), nullable=False)
@@ -130,6 +131,7 @@ class SimulationRun(Base):
     random_seed: Mapped[int] = mapped_column(BIGINT, nullable=False)
     simulation_speed: Mapped[float] = mapped_column(Double, nullable=False, default=1.0)
     configuration: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    session_key: Mapped[str | None] = mapped_column(String(128), nullable=True)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     completed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
@@ -250,3 +252,21 @@ class Debrief(Base):
     model: Mapped[str | None] = mapped_column(String(100))
     structured_result: Mapped[dict[str, Any] | None] = mapped_column(JSON)
     generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now)
+
+
+class AuditEvent(Base):
+    __tablename__ = "audit_events"
+    __table_args__ = (
+        Index("ix_audit_events_created", "created_at"),
+        Index("ix_audit_events_resource", "resource_type", "resource_id"),
+        Index("ix_audit_events_actor", "actor_subject"),
+    )
+
+    id: Mapped[UUID] = mapped_column(Uuid(as_uuid=True), primary_key=True, default=uuid4)
+    actor_subject: Mapped[str] = mapped_column(String(128), nullable=False)
+    actor_role: Mapped[str] = mapped_column(String(32), nullable=False)
+    action: Mapped[str] = mapped_column(String(100), nullable=False)
+    resource_type: Mapped[str] = mapped_column(String(64), nullable=False)
+    resource_id: Mapped[str | None] = mapped_column(String(64))
+    details: Mapped[dict[str, Any]] = mapped_column(JSON, default=dict, nullable=False)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utc_now, nullable=False)

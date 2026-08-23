@@ -39,11 +39,26 @@ class VehicleConfiguration:
 
 
 @dataclass(frozen=True)
+class AreaOfInterest:
+    min_latitude: float
+    max_latitude: float
+    min_longitude: float
+    max_longitude: float
+
+    def contains(self, latitude: float, longitude: float) -> bool:
+        return (
+            self.min_latitude <= latitude <= self.max_latitude
+            and self.min_longitude <= longitude <= self.max_longitude
+        )
+
+
+@dataclass(frozen=True)
 class MissionConfiguration:
     id: UUID
     vehicles: tuple[VehicleConfiguration, ...]
     waypoints: tuple[WaypointConfiguration, ...]
     duration_limit_ms: int = 15 * 60 * 1000
+    area_of_interest: AreaOfInterest | None = None
 
 
 @dataclass(frozen=True)

@@ -44,6 +44,7 @@ DATABASE_URL=postgresql://...
 REDIS_URL=redis://localhost:6379
 ANALYSIS_PROVIDER=mock
 ANALYSIS_API_KEY=
+AUTH_SECRET=replace-with-long-random-secret
 PUBLIC_DEMO=false
 SIM_MAX_VEHICLES=1000
 DEFAULT_TELEMETRY_RATE_HZ=10
@@ -61,9 +62,10 @@ With `PUBLIC_DEMO=true`, the backend enforces 50 vehicles, a 15-minute maximum
 mission duration, 5 runs per session, 10 analysis questions per run, and 5 Hz maximum
 telemetry. These limits remain effective if a client is modified.
 
-Anonymous access uses a bounded session key from `X-Session-Id` or the forwarded client
-address. This is a lightweight hosted guard, not an authentication system; a
-production deployment should place a trusted proxy/session layer in front of it.
+Mutating REST endpoints and WebSocket subscribe require a signed demo JWT
+(`operator` or `observer`). Public-demo run quotas key off the JWT subject stored in
+`simulation_runs.session_key`. This is demo-grade security literacy—not a
+replacement for corporate IdP, OIDC, or multi-tenant ACLs (see ADR-007).
 
 ## Cold starts and dependency degradation
 

@@ -4,9 +4,10 @@ from fastapi import APIRouter, Depends, HTTPException, Response, status
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import VehicleCreate, VehicleRead
+from app.auth import AuthPrincipal, require_operator
 from app.db.models.entities import MissionVehicle
 from app.db.session import get_db_session
-from app.services import mission_service
+from app.services import audit_service, mission_service
 
 router = APIRouter(prefix="/missions/{mission_id}/vehicles", tags=["vehicles"])
 
@@ -31,10 +32,23 @@ def to_vehicle_read(membership: MissionVehicle) -> VehicleRead:
 
 @router.post("", response_model=VehicleRead, status_code=status.HTTP_201_CREATED)
 async def add_vehicle(
-    mission_id: UUID, payload: VehicleCreate, session: AsyncSession = Depends(get_db_session)
+    mission_id: UUID,
+    payload: VehicleCreate,
+    session: AsyncSession = Depends(get_db_session),
+    principal: AuthPrincipal = Depends(require_operator),
 ) -> VehicleRead:
     try:
-        return to_vehicle_read(await mission_service.add_vehicle(session, mission_id, payload))
+        membership = await mission_service.add_vehicle(session, mission_id, payload)
+        await audit_service.record_audit(
+            session,
+            principal=principal,
+            action="vehicle.add",
+            resource_type="mission",
+            resource_id=mission_id,
+            details={"vehicle_id": str(membership.id), "callsign": membership.vehicle_definition.callsign},
+        )
+        await session.commit()
+        return to_vehicle_read(membership)
     except mission_service.MissionNotFound as exc:
         raise HTTPException(status_code=404, detail="Mission not found") from exc
     except mission_service.MissionConflict as exc:
@@ -52,10 +66,22 @@ async def list_vehicles(mission_id: UUID, session: AsyncSession = Depends(get_db
 
 @router.delete("/{vehicle_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def remove_vehicle(
-    mission_id: UUID, vehicle_id: UUID, session: AsyncSession = Depends(get_db_session)
+    mission_id: UUID,
+    vehicle_id: UUID,
+    session: AsyncSession = Depends(get_db_session),
+    principal: AuthPrincipal = Depends(require_operator),
 ) -> Response:
     try:
         await mission_service.remove_vehicle(session, mission_id, vehicle_id)
+        await audit_service.record_audit(
+            session,
+            principal=principal,
+            action="vehicle.remove",
+            resource_type="mission",
+            resource_id=mission_id,
+            details={"vehicle_id": str(vehicle_id)},
+        )
+        await session.commit()
     except mission_service.MissionNotFound as exc:
         raise HTTPException(status_code=404, detail="Mission not found") from exc
     except mission_service.VehicleNotFound as exc:

@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowUpRight, FileText, MessageSquare, ShieldCheck } from "lucide-react";
 import { useEffect, useState } from "react";
 
+import { AuditPanel } from "@/components/audit-panel";
 import { PageHeader } from "@/components/page-header";
 import { RunNavigation } from "@/components/run-navigation";
 import { StatusBadge, statusTone } from "@/components/status-badge";
@@ -57,6 +58,8 @@ export function DebriefDashboard({ runId }: { runId: string }) {
       </section>
 
       <section className="card integrity-card" aria-labelledby="integrity-heading"><div className="section-heading"><div><div className="eyebrow">Data integrity</div><h2 id="integrity-heading">Telemetry accounting</h2><p>Integrity counters come from the completed run summary, not database sampling gaps.</p></div><ShieldCheck size={18} aria-hidden="true" /></div><div className="diagnostic-grid"><div className="metric"><span>Generated messages</span><strong>{metrics.telemetry_messages_generated.toLocaleString()}</strong></div><div className="metric"><span>Delivered messages</span><strong>{metrics.telemetry_messages_delivered.toLocaleString()}</strong></div><div className="metric"><span>Persisted samples</span><strong>{metrics.telemetry_messages_persisted.toLocaleString()}</strong></div><div className="metric"><span>Missing originals</span><strong>{metrics.telemetry_sequences_missing}</strong></div><div className="metric"><span>Duplicates</span><strong>{metrics.telemetry_sequences_duplicate}</strong></div><div className="metric"><span>Out of order</span><strong>{metrics.telemetry_sequences_out_of_order}</strong></div></div></section>
+
+      <AuditPanel runId={runId} />
 
       <section className="card analyst-panel" aria-labelledby="analyst-heading">
         <div className="section-heading"><div><div className="eyebrow">Operational analysis / read-only</div><h2 id="analyst-heading">Ask an evidence-backed question</h2><p>The analysis service can summarize this run and link claims to persisted event IDs. It cannot modify mission state or control vehicles.</p></div><MessageSquare size={18} aria-hidden="true" /></div>

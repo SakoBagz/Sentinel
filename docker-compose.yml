@@ -37,6 +37,7 @@ services:
       DATABASE_URL: postgresql+asyncpg://sentinel:sentinel@postgres:5432/sentinel
       REDIS_URL: redis://redis:6379/0
       PUBLIC_DEMO: "false"
+      AUTH_SECRET: sentinel-dev-auth-secret-change-me
       SIM_MAX_VEHICLES: 1000
       DEFAULT_TELEMETRY_RATE_HZ: 10
       TELEMETRY_PERSIST_RATE_HZ: 2

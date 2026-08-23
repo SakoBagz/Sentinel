@@ -38,6 +38,7 @@ class _RuntimeVehicle:
     gps_quality_percent: float = 100.0
     sensor_status: str = "AVAILABLE"
     hold_until_ms: int = 0
+    outside_aoi: bool = False
 
 
 class SimulationEngine:
@@ -210,7 +211,12 @@ class SimulationEngine:
         vehicle.battery_percent = max(
             0.0,
             vehicle.battery_percent
-            - self.battery_model.drain_percent(vehicle.ground_speed_mps, self.clock.dt_seconds) * multiplier,
+            - self.battery_model.drain_percent(
+                vehicle.ground_speed_mps,
+                self.clock.dt_seconds,
+                cruise_speed_mps=vehicle.config.cruise_speed_mps,
+            )
+            * multiplier,
         )
         if vehicle.battery_percent <= 30 and not vehicle.low_battery_emitted:
             vehicle.low_battery_emitted = True
@@ -274,6 +280,41 @@ class SimulationEngine:
                 self._transition(vehicle, VehicleMissionState.LANDED, EventType.VEHICLE_LANDED)
                 self._transition(vehicle, VehicleMissionState.COMPLETE, EventType.VEHICLE_COMPLETED)
         self._update_battery(vehicle)
+        self._update_geofence(vehicle)
+
+    def _update_geofence(self, vehicle: _RuntimeVehicle) -> None:
+        aoi = self.mission.area_of_interest
+        if aoi is None:
+            return
+        inside = aoi.contains(vehicle.position.latitude, vehicle.position.longitude)
+        if vehicle.outside_aoi and inside:
+            vehicle.outside_aoi = False
+            self._emit_event(
+                vehicle,
+                EventType.GEOFENCE_REENTER,
+                EventSeverity.INFO,
+                {
+                    "latitude": vehicle.position.latitude,
+                    "longitude": vehicle.position.longitude,
+                },
+            )
+        elif not vehicle.outside_aoi and not inside:
+            vehicle.outside_aoi = True
+            self._emit_event(
+                vehicle,
+                EventType.GEOFENCE_EXIT,
+                EventSeverity.WARNING,
+                {
+                    "latitude": vehicle.position.latitude,
+                    "longitude": vehicle.position.longitude,
+                    "aoi": {
+                        "min_latitude": aoi.min_latitude,
+                        "max_latitude": aoi.max_latitude,
+                        "min_longitude": aoi.min_longitude,
+                        "max_longitude": aoi.max_longitude,
+                    },
+                },
+            )
 
     def _sync_network_state(self, vehicle: _RuntimeVehicle) -> None:
         previous = vehicle.communications_state.value

@@ -18,7 +18,7 @@ from app.db.models.entities import (
 from app.domain.enums import EventSeverity, EventType, MissionStatus, RunStatus
 from app.services import mission_service
 from app.services.public_limits import ensure_run_allowed, validate_telemetry_rate
-from sentinel_sim.models import MissionConfiguration, SimulationEvent, VehicleConfiguration, WaypointConfiguration, deterministic_id
+from sentinel_sim.models import AreaOfInterest, MissionConfiguration, SimulationEvent, VehicleConfiguration, WaypointConfiguration, deterministic_id
 from sentinel_sim.navigation import Position
 from sentinel_sim.network import NetworkConfiguration
 from app.realtime.redis import redis_client
@@ -32,6 +32,25 @@ class RunNotFound(Exception):
 class RunConflict(Exception):
     pass
 
+
+def _area_of_interest_from_mission(mission: Mission, vehicle_configs: list[VehicleConfiguration]) -> AreaOfInterest | None:
+    latitudes: list[float] = []
+    longitudes: list[float] = []
+    for vehicle in vehicle_configs:
+        latitudes.append(vehicle.starting_position.latitude)
+        longitudes.append(vehicle.starting_position.longitude)
+    for waypoint in mission.waypoints:
+        latitudes.append(waypoint.latitude)
+        longitudes.append(waypoint.longitude)
+    if not latitudes:
+        return None
+    pad = 0.02  # ~2 km soft survey box padding
+    return AreaOfInterest(
+        min_latitude=min(latitudes) - pad,
+        max_latitude=max(latitudes) + pad,
+        min_longitude=min(longitudes) - pad,
+        max_longitude=max(longitudes) + pad,
+    )
 
 async def _record_lifecycle_event(session: AsyncSession, run: SimulationRun, event_type: EventType, sim_time_ms: int) -> SimulationEvent:
     event = SimulationEvent(
@@ -114,6 +133,7 @@ def _mission_to_simulation(mission: Mission, run: SimulationRun) -> MissionConfi
         vehicles=tuple(vehicle_configs),
         waypoints=tuple(waypoints),
         duration_limit_ms=int(run.configuration.get("duration_limit_ms", 15 * 60 * 1000)),
+        area_of_interest=_area_of_interest_from_mission(mission, vehicle_configs),
     )
 
 
@@ -212,6 +232,7 @@ async def create_run(session: AsyncSession, mission_id: UUID, payload: RunCreate
         status=RunStatus.READY,
         random_seed=seed,
         simulation_speed=payload.simulation_speed,
+        session_key=session_id[:128] if session_id else None,
         configuration={
             "mission_status_at_creation": mission.status.value,
             "duration_limit_ms": duration_minutes * 60 * 1000,

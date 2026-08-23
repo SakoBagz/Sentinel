@@ -312,3 +312,45 @@ class AnalystResponse(APIModel):
     provider: str
     model: str | None = None
     sections: dict[str, str] = Field(default_factory=dict)
+
+
+class AuthSessionCreate(APIModel):
+    role: Literal["operator", "observer"] = "operator"
+    subject: str | None = Field(default=None, max_length=128)
+
+
+class AuthSessionRead(APIModel):
+    access_token: str
+    token_type: str
+    role: Literal["operator", "observer"]
+    subject: str
+    expires_at: str
+
+
+class PrincipalRead(APIModel):
+    subject: str
+    role: Literal["operator", "observer"]
+    token_id: str
+
+
+class AuditEventRead(APIModel):
+    id: UUID
+    actor_subject: str
+    actor_role: str
+    action: str
+    resource_type: str
+    resource_id: str | None = None
+    details: dict[str, Any] = Field(default_factory=dict)
+    created_at: datetime
+
+
+class PatternGenerateRequest(APIModel):
+    pattern: Literal["lawnmower", "expanding_square"]
+    vehicle_id: UUID
+    center_latitude: float = Field(ge=-90, le=90)
+    center_longitude: float = Field(ge=-180, le=180)
+    altitude_m: float = Field(default=120.0, ge=0)
+    spacing_m: float = Field(default=250.0, gt=0)
+    legs: int = Field(default=6, ge=2, le=40)
+    leg_length_m: float = Field(default=1_200.0, gt=0)
+    target_speed_mps: float | None = Field(default=None, gt=0)

@@ -84,6 +84,8 @@ class EventType(StrEnum):
     COMMUNICATIONS_RESTORED = "communications.restored"
     BATTERY_LOW = "battery.low"
     BATTERY_CRITICAL = "battery.critical"
+    GEOFENCE_EXIT = "geofence.exit"
+    GEOFENCE_REENTER = "geofence.reenter"
     FAILURE_INJECTED = "failure.injected"
     FAILURE_CLEARED = "failure.cleared"
     SYSTEM_WARNING = "system.warning"

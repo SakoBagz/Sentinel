@@ -12,7 +12,6 @@
     "test:e2e": "playwright test"
   },
   "dependencies": {
-    "@tanstack/react-query": "^5.66.0",
     "@types/three": "^0.185.4",
     "lucide-react": "^1.31.0",
     "maplibre-gl": "^5.12.0",

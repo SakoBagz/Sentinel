@@ -1,4 +1,4 @@
-import { expect, test } from "@playwright/test";
+import { expect, test, type APIRequestContext } from "@playwright/test";
 
 const apiBase = process.env.PLAYWRIGHT_API_BASE_URL ?? "http://127.0.0.1:8000";
 
@@ -7,8 +7,16 @@ async function json<T>(response: { ok(): boolean; json(): Promise<T> }): Promise
   return response.json();
 }
 
+async function operatorHeaders(request: APIRequestContext): Promise<Record<string, string>> {
+  const session = await json<{ access_token: string }>(
+    await request.post(`${apiBase}/api/auth/session`, { data: { role: "operator" } }),
+  );
+  return { Authorization: `Bearer ${session.access_token}` };
+}
+
 test("launches the seeded run from the landing page", async ({ page }) => {
   await page.goto("/");
+  await expect(page.getByRole("heading", { name: "SENTINEL" })).toBeVisible();
   await expect(page.getByRole("button", { name: "Launch seeded run" })).toBeVisible();
   await page.getByRole("button", { name: "Launch seeded run" }).click();
   await expect(page).toHaveURL(/\/runs\/[^/]+\/live/, { timeout: 30_000 });
@@ -18,12 +26,15 @@ test("launches the seeded run from the landing page", async ({ page }) => {
 
 test("runs the browser golden path through live telemetry, replay, and debrief", async ({ page, request }) => {
   test.setTimeout(240_000);
+  const headers = await operatorHeaders(request);
   const suffix = Date.now().toString(36);
   const callsign = `E2E-${suffix}`;
   const mission = await json<{ id: string }>(await request.post(`${apiBase}/api/missions`, {
+    headers,
     data: { name: `Browser golden path ${suffix}`, scenario_type: "environmental_survey" },
   }));
   await json<{ id: string }>(await request.post(`${apiBase}/api/missions/${mission.id}/vehicles`, {
+    headers,
     data: {
       callsign,
       vehicle_type: "SURVEY",

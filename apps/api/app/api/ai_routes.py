@@ -1,12 +1,15 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.ai.providers import AnalystProviderError, AnalystProviderUnavailable
 from app.ai.service import AnalystQuotaExceeded, AnalystRateLimited, analyst_service
 from app.api.schemas import AnalystRequest, AnalystResponse
+from app.auth import AuthPrincipal, require_reader
 from app.db.session import get_db_session
+from app.services import audit_service
+from app.services.public_limits import session_key_from_subject
 from app.services.run_service import RunNotFound
 
 router = APIRouter(prefix="/runs/{run_id}", tags=["analyst"])
@@ -16,25 +19,28 @@ def _response(result) -> AnalystResponse:
     return AnalystResponse.model_validate(result.model_dump(mode="json"))
 
 
-def _session_key(x_session_id: str | None, x_forwarded_for: str | None) -> str:
-    return x_session_id or (x_forwarded_for.split(",", 1)[0].strip() if x_forwarded_for else "anonymous")
-
-
 @router.post("/assistant", response_model=AnalystResponse)
 async def assistant(
     run_id: UUID,
     payload: AnalystRequest,
     session: AsyncSession = Depends(get_db_session),
-    x_session_id: str | None = Header(default=None),
-    x_forwarded_for: str | None = Header(default=None),
+    principal: AuthPrincipal = Depends(require_reader),
 ) -> AnalystResponse:
     try:
         result = await analyst_service.analyze(
             session,
             run_id,
             payload,
-            _session_key(x_session_id, x_forwarded_for),
+            session_key_from_subject(principal.subject),
         )
+        await audit_service.record_audit(
+            session,
+            principal=principal,
+            action="analysis.assistant",
+            resource_type="run",
+            resource_id=run_id,
+        )
+        await session.commit()
         return _response(result)
     except RunNotFound as exc:
         raise HTTPException(status_code=404, detail="Run not found") from exc
@@ -52,15 +58,22 @@ async def assistant(
 async def debrief(
     run_id: UUID,
     session: AsyncSession = Depends(get_db_session),
-    x_session_id: str | None = Header(default=None),
-    x_forwarded_for: str | None = Header(default=None),
+    principal: AuthPrincipal = Depends(require_reader),
 ) -> AnalystResponse:
     try:
         result = await analyst_service.debrief(
             session,
             run_id,
-            _session_key(x_session_id, x_forwarded_for),
+            session_key_from_subject(principal.subject),
         )
+        await audit_service.record_audit(
+            session,
+            principal=principal,
+            action="analysis.debrief",
+            resource_type="run",
+            resource_id=run_id,
+        )
+        await session.commit()
         return _response(result)
     except RunNotFound as exc:
         raise HTTPException(status_code=404, detail="Run not found") from exc
