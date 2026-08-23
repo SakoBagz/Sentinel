@@ -2,7 +2,7 @@
 
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import { Marker, Popup, type Map as MapLibreMap } from "maplibre-gl";
+import { Marker, type Map as MapLibreMap } from "maplibre-gl";
 import { Pause, Play, Radio, Search, Square, TriangleAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
@@ -13,7 +13,17 @@ import { RunNavigation } from "@/components/run-navigation";
 import { StatusBadge, statusTone } from "@/components/status-badge";
 import { VehicleInspectField } from "@/components/vehicle-inspect-field";
 import { createFailure, ensureAuthSession, failureTypes, getMetrics, getMission, getRun, getRunSnapshot, Mission, pauseRun, resumeRun, Run, RunMetrics, startRun, stopRun, FailureType } from "@/lib/api";
-import { createOpsMap, makeMarkerInteractive, setMarkerSelected, updateLineGeoJson, updateMarkerHeading, updateWhenStyleReady, type OpsLine } from "@/lib/ops-map";
+import {
+  communicationsTone,
+  createOpsMap,
+  fitCoordinates,
+  OPS_ROUTE_PAINT,
+  OPS_TRAIL_PAINT,
+  updateLineGeoJson,
+  updateWhenStyleReady,
+  upsertVehicleMarker,
+  type OpsLine,
+} from "@/lib/ops-map";
 import { LiveEvent, MissionState, VehicleTelemetry, useLiveTelemetry } from "@/stores/live-telemetry";
 
 const envelopeSchema = z.object({
@@ -42,29 +52,74 @@ function LiveMap({ vehicles, history, plannedRoutes, callsigns, selectedVehicleI
   const node = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibreMap | null>(null);
   const markers = useRef<Record<string, Marker>>({});
+  const fitted = useRef(false);
+  const focusedVehicle = useRef<string | null>(null);
 
   useEffect(() => {
     if (!node.current || map.current) return;
     const instance = createOpsMap(node.current);
     map.current = instance;
-    return () => { instance.remove(); map.current = null; };
+    return () => {
+      instance.remove();
+      map.current = null;
+      markers.current = {};
+      fitted.current = false;
+      focusedVehicle.current = null;
+    };
   }, []);
 
   useEffect(() => {
     const instance = map.current;
     if (!instance) return;
-    for (const [vehicleId, telemetry] of Object.entries(vehicles)) {
-      const marker = markers.current[vehicleId] ?? new Marker({ color: "#d9dde1" }).setLngLat([telemetry.longitude, telemetry.latitude]).addTo(instance);
-      marker.setLngLat([telemetry.longitude, telemetry.latitude]).setPopup(new Popup().setText(callsigns[vehicleId] ?? vehicleId));
-      makeMarkerInteractive(marker, `${callsigns[vehicleId] ?? vehicleId} live position`, () => onSelect(vehicleId));
-      updateMarkerHeading(marker, telemetry.headingDeg);
-      markers.current[vehicleId] = marker;
+    const positions = Object.values(vehicles);
+    for (const telemetry of positions) {
+      upsertVehicleMarker({
+        map: instance,
+        markers: markers.current,
+        vehicleId: telemetry.vehicleId,
+        longitude: telemetry.longitude,
+        latitude: telemetry.latitude,
+        callsign: callsigns[telemetry.vehicleId] ?? telemetry.vehicleId.slice(0, 8),
+        headingDeg: telemetry.headingDeg,
+        tone: communicationsTone(telemetry.communicationsState),
+        selected: selectedVehicleId ? selectedVehicleId === telemetry.vehicleId : false,
+        onSelect: () => onSelect(telemetry.vehicleId),
+      });
     }
     for (const [vehicleId, marker] of Object.entries(markers.current)) {
-      if (!vehicles[vehicleId]) { marker.remove(); delete markers.current[vehicleId]; }
-      else setMarkerSelected(marker, !selectedVehicleId || selectedVehicleId === vehicleId);
+      if (!vehicles[vehicleId]) {
+        marker.remove();
+        delete markers.current[vehicleId];
+      }
+    }
+
+    if (!fitted.current && positions.length > 0) {
+      fitCoordinates(
+        instance,
+        positions.map((sample) => [sample.longitude, sample.latitude]),
+        { padding: 80, maxZoom: 13, duration: 0 },
+      );
+      fitted.current = true;
     }
   }, [vehicles, selectedVehicleId, onSelect, callsigns]);
+
+  useEffect(() => {
+    const instance = map.current;
+    if (!instance || !selectedVehicleId) {
+      focusedVehicle.current = selectedVehicleId;
+      return;
+    }
+    if (focusedVehicle.current === selectedVehicleId) return;
+    const focused = vehicles[selectedVehicleId];
+    focusedVehicle.current = selectedVehicleId;
+    if (!focused) return;
+    instance.easeTo({
+      center: [focused.longitude, focused.latitude],
+      zoom: Math.max(instance.getZoom(), 12.2),
+      duration: 450,
+      essential: true,
+    });
+  }, [selectedVehicleId, vehicles]);
 
   useEffect(() => {
     const instance = map.current;
@@ -75,8 +130,8 @@ function LiveMap({ vehicles, history, plannedRoutes, callsigns, selectedVehicleI
         coordinates: samples.map((sample) => [sample.longitude, sample.latitude]),
       }));
       const routes: OpsLine[] = Object.entries(plannedRoutes).map(([id, coordinates]) => ({ id, coordinates }));
-      updateLineGeoJson(instance, { sourceId: "sentinel-live-trails", lines: trails, paint: { "line-color": "#f1f2f3", "line-width": 2, "line-opacity": 0.86 } });
-      updateLineGeoJson(instance, { sourceId: "sentinel-planned-routes", lines: routes, paint: { "line-color": "#aeb5bc", "line-width": 2, "line-opacity": 0.66 } });
+      updateLineGeoJson(instance, { sourceId: "sentinel-planned-routes", lines: routes, paint: OPS_ROUTE_PAINT });
+      updateLineGeoJson(instance, { sourceId: "sentinel-live-trails", lines: trails, paint: OPS_TRAIL_PAINT });
     };
     return updateWhenStyleReady(instance, updateLines);
   }, [history, plannedRoutes]);
