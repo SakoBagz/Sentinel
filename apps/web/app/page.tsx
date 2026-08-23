@@ -14,7 +14,7 @@ export default function HomePage() {
             SENTINEL
           </h1>
           <h2 className="hero-enter" style={{ ["--enter-delay" as string]: "110ms" }}>
-            See the mission. Trust the evidence.
+            Live ops under unreliable delivery.
           </h2>
           <p className="hero-enter" style={{ ["--enter-delay" as string]: "170ms" }}>
             Plan simulated UAV runs, observe unreliable systems in real time, and replay every operational decision.
