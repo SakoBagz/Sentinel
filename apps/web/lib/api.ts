@@ -2,7 +2,9 @@ import { z } from "zod";
 
 import type { MissionScenario } from "@/lib/mission-catalog";
 
-const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
+// Empty/default keeps browser calls same-origin so Next can proxy to the API
+// (works for local split processes and Cursor/cloud port forwarding).
+const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 const TOKEN_KEY = "sentinel-access-token";
 const ROLE_KEY = "sentinel-role";
@@ -185,7 +187,9 @@ async function request<T>(path: string, init?: RequestInit, schema?: z.ZodType<T
     }
   }
   if (!response) {
-    throw new Error(`Sentinel API is unavailable at ${apiBase}. Start the local services and try again.`);
+    throw new Error(
+      `Sentinel API is unavailable${apiBase ? ` at ${apiBase}` : ""}. Start the local services and try again.`,
+    );
   }
   if (!response.ok) {
     const body = await response.text();

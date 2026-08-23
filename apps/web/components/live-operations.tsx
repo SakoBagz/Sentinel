@@ -351,7 +351,11 @@ export function LiveOperations({ runId }: { runId: string }) {
   }, [runId, metricsLive]);
 
   useEffect(() => {
-    const wsBase = process.env.NEXT_PUBLIC_WS_BASE_URL ?? "ws://localhost:8000";
+    const wsBase =
+      process.env.NEXT_PUBLIC_WS_BASE_URL ??
+      (typeof window !== "undefined"
+        ? `${window.location.protocol === "https:" ? "wss" : "ws"}://${window.location.host}`
+        : "ws://127.0.0.1:8000");
     let socket: WebSocket | null = null;
     let retry: ReturnType<typeof setTimeout> | undefined;
     let heartbeat: ReturnType<typeof setInterval> | undefined;
