@@ -60,12 +60,15 @@ export function VehicleInspectField({
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.08;
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x171a1e, 2.2));
-    const key = new THREE.DirectionalLight(0xffffff, 3.2);
-    key.position.set(-3, 5, 4);
+    scene.add(new THREE.HemisphereLight(0xeef1f4, 0x14171c, 1.7));
+    const key = new THREE.DirectionalLight(0xffffff, 2.8);
+    key.position.set(-3.2, 5.2, 4.4);
     scene.add(key);
-    const rim = new THREE.DirectionalLight(0x9da5ad, 2);
-    rim.position.set(4, 1, -4);
+    const fill = new THREE.DirectionalLight(0x9aa3ad, 1.15);
+    fill.position.set(3.4, 1.2, 2.2);
+    scene.add(fill);
+    const rim = new THREE.DirectionalLight(0xd7dde3, 2.3);
+    rim.position.set(4.2, 1.4, -4.2);
     scene.add(rim);
 
     const aircraft = new THREE.Group();

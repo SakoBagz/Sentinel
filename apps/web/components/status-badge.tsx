@@ -3,7 +3,7 @@ import type { ReactNode } from "react";
 export type StatusTone = "neutral" | "positive" | "warning" | "critical";
 
 const toneSymbols: Record<StatusTone, string> = {
-  neutral: "—",
+  neutral: "-",
   positive: "●",
   warning: "!",
   critical: "×",

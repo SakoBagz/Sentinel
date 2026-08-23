@@ -126,12 +126,12 @@ function OperationalDiagnostics({ metrics, metricsError, connection, duplicates,
   const integrityNominal = duplicates === 0 && missing === 0 && outOfOrder === 0;
   return (
     <section className="card diagnostics-card" aria-label="Operational diagnostics">
-      <div className="diagnostics-header"><div><div className="eyebrow">Operational diagnostics</div><h2>Control-plane health</h2></div><span className={`diagnostics-badge ${metrics ? "ready" : "warning"}`}><span className="status-dot" />{metrics ? "Durable metrics" : "Awaiting persistence"}</span></div>
+      <div className="diagnostics-header"><div><div className="eyebrow">Operational diagnostics</div><h2>Control-plane health</h2></div><span className={`diagnostics-badge ${metrics ? "ready" : "warning"}`}><span className={`status-dot${metrics ? " live" : ""}`} />{metrics ? "Durable metrics" : "Awaiting persistence"}</span></div>
       <div className="diagnostic-grid">
-        <div className="metric"><span>Delivered telemetry</span><strong>{metrics?.telemetry_messages_delivered.toLocaleString() ?? "—"}</strong></div>
-        <div className="metric"><span>Telemetry rate</span><strong>{metrics ? `${metrics.telemetry_throughput_per_second.toFixed(1)} msg/s` : "—"}</strong></div>
-        <div className="metric"><span>p95 delivery latency</span><strong>{metrics ? `${metrics.latency_p95_ms.toFixed(1)} ms` : "—"}</strong></div>
-        <div className="metric"><span>Communications availability</span><strong>{metrics ? `${metrics.communications_availability_percent.toFixed(1)}%` : "—"}</strong></div>
+        <div className="metric"><span>Delivered telemetry</span><strong>{metrics?.telemetry_messages_delivered.toLocaleString() ?? "-"}</strong></div>
+        <div className="metric"><span>Telemetry rate</span><strong>{metrics ? `${metrics.telemetry_throughput_per_second.toFixed(1)} msg/s` : "-"}</strong></div>
+        <div className="metric"><span>p95 delivery latency</span><strong>{metrics ? `${metrics.latency_p95_ms.toFixed(1)} ms` : "-"}</strong></div>
+        <div className="metric"><span>Communications availability</span><strong>{metrics ? `${metrics.communications_availability_percent.toFixed(1)}%` : "-"}</strong></div>
       </div>
       <div className="integrity-strip" aria-label="Live stream integrity">
         <div className="integrity-strip-item" data-state={connection === "LIVE" ? "nominal" : "attention"}><span>WS</span><strong>{connection}</strong></div>
