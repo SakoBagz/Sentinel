@@ -159,19 +159,20 @@ export function OverviewField() {
     renderer.toneMapping = THREE.ACESFilmicToneMapping;
     renderer.toneMappingExposure = 1.08;
 
-    const hemisphereLight = new THREE.HemisphereLight(0xe9edf0, 0x16191d, 1.9);
+    const hemisphereLight = new THREE.HemisphereLight(0xeef1f4, 0x12151a, 1.55);
     scene.add(hemisphereLight);
 
-    const keyLight = new THREE.DirectionalLight(0xffffff, 3.8);
-    keyLight.position.set(-3.5, 4.5, 5.5);
+    const keyLight = new THREE.DirectionalLight(0xffffff, 3.1);
+    keyLight.position.set(-3.8, 5.2, 5.8);
     scene.add(keyLight);
 
-    const fillLight = new THREE.DirectionalLight(0xaab2ba, 1.7);
-    fillLight.position.set(4, 0.8, 1.5);
+    const fillLight = new THREE.DirectionalLight(0x9aa3ad, 1.35);
+    fillLight.position.set(4.2, 0.9, 1.4);
     scene.add(fillLight);
 
-    const rimLight = new THREE.DirectionalLight(0xd3d8dd, 2.2);
-    rimLight.position.set(2, 1.5, -5);
+    const rimLight = new THREE.DirectionalLight(0xd7dde3, 2.6);
+    rimLight.position.set(2.2, 1.8, -5.2);
+    scene.add(rimLight);
     scene.add(rimLight);
 
     const system = new THREE.Group();
@@ -379,9 +380,9 @@ export function OverviewField() {
     uav.add(propeller);
 
     const shadowMaterial = new THREE.MeshBasicMaterial({
-      color: 0x000000,
+      color: 0x0a0b0d,
       transparent: true,
-      opacity: 0.22,
+      opacity: 0.28,
       depthWrite: false,
     });
     const aircraftShadow = new THREE.Mesh(new THREE.CircleGeometry(1.55, 64), shadowMaterial);

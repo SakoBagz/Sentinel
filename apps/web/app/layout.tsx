@@ -18,7 +18,7 @@ const syne = Syne({
 });
 
 export const metadata: Metadata = {
-  title: "Sentinel — Mission Operations",
+  title: "Sentinel - Mission Operations",
   description: "Real-time UAV mission simulation and fleet operations.",
 };
 
