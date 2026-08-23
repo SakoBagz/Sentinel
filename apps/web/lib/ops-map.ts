@@ -27,31 +27,31 @@ type LineFeatureCollection = {
   }>;
 };
 
-/** Native dark basemap — fits the ops console without CSS grayscale hacks. */
-export const OPS_MAP_STYLE = "https://tiles.openfreemap.org/styles/dark";
+/** Liberty basemap without CSS desaturation — readable terrain + roads for ops work. */
+export const OPS_MAP_STYLE = "https://tiles.openfreemap.org/styles/liberty";
 
 /** Angeles Forest / Antelope Valley survey area (demo default). */
 export const OPS_MAP_CENTER: OpsCoordinate = [-118.24, 34.145];
 export const OPS_MAP_DEFAULT_ZOOM = 11.5;
 
 export const OPS_TRAIL_PAINT: NonNullable<LineLayerSpecification["paint"]> = {
-  "line-color": "#e8edf2",
-  "line-width": 2.5,
+  "line-color": "#0b1220",
+  "line-width": 3.25,
   "line-opacity": 0.92,
-  "line-blur": 0.2,
+  "line-blur": 0.15,
 };
 
 export const OPS_ROUTE_PAINT: NonNullable<LineLayerSpecification["paint"]> = {
-  "line-color": "#6f9fbf",
-  "line-width": 2,
-  "line-opacity": 0.7,
-  "line-dasharray": [1.4, 1.6],
+  "line-color": "#1f5f8b",
+  "line-width": 2.5,
+  "line-opacity": 0.85,
+  "line-dasharray": [1.6, 1.4],
 };
 
 export const OPS_REPLAY_TRAIL_PAINT: NonNullable<LineLayerSpecification["paint"]> = {
-  "line-color": "#9eb4c6",
-  "line-width": 2.25,
-  "line-opacity": 0.82,
+  "line-color": "#16324a",
+  "line-width": 2.75,
+  "line-opacity": 0.88,
 };
 
 export function createOpsMap(
@@ -110,16 +110,16 @@ export function updateLineGeoJson(
   }
 
   map.addSource(sourceId, { type: "geojson", data });
-  // Dark casing so trails stay readable over both dark water and bright labels.
+  // Light casing so dark trails stay readable over both parks and dense streets.
   map.addLayer({
     id: `${layerId}-casing`,
     type: "line",
     source: sourceId,
     paint: {
-      "line-color": "#0a0b0d",
-      "line-width": (typeof paint["line-width"] === "number" ? paint["line-width"] : 2) + 2.5,
-      "line-opacity": 0.55,
-      "line-blur": 0.4,
+      "line-color": "#ffffff",
+      "line-width": (typeof paint["line-width"] === "number" ? paint["line-width"] : 2) + 3,
+      "line-opacity": 0.7,
+      "line-blur": 0.35,
     },
     layout: { "line-cap": "round", "line-join": "round" },
   });
