@@ -74,4 +74,4 @@ expanding-square helpers generate waypoints in the planner. Neither claims GIS-g
 spatial analysis nor autonomy.
 
 **Reasoning:** Civilian search-pattern and constraint events deepen the ops story
-interviewers recognize without entering weapons, targeting, or classified C2 territory.
+operators recognize without entering weapons, targeting, or classified C2 territory.

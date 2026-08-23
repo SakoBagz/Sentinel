@@ -1,4 +1,4 @@
-"""Demo JWT session auth (portfolio-grade; not a production IdP)."""
+"""Demo JWT session auth (demo-grade; not a production IdP)."""
 
 from __future__ import annotations
 
