@@ -4,6 +4,89 @@ import type { MissionScenario } from "@/lib/mission-catalog";
 
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "http://localhost:8000";
 
+const TOKEN_KEY = "sentinel-access-token";
+const ROLE_KEY = "sentinel-role";
+const SUBJECT_KEY = "sentinel-subject";
+
+const authSessionSchema = z.object({
+  access_token: z.string(),
+  token_type: z.string(),
+  role: z.enum(["operator", "observer"]),
+  subject: z.string(),
+  expires_at: z.string(),
+});
+
+export type AuthSession = z.infer<typeof authSessionSchema>;
+
+let memoryToken: string | null = null;
+let sessionPromise: Promise<string> | null = null;
+
+function readStoredToken(): string | null {
+  if (typeof window === "undefined") return memoryToken;
+  return window.localStorage.getItem(TOKEN_KEY);
+}
+
+export function getAccessToken(): string | null {
+  return readStoredToken();
+}
+
+export function clearAuthSession(): void {
+  memoryToken = null;
+  sessionPromise = null;
+  if (typeof window === "undefined") return;
+  window.localStorage.removeItem(TOKEN_KEY);
+  window.localStorage.removeItem(ROLE_KEY);
+  window.localStorage.removeItem(SUBJECT_KEY);
+}
+
+function storeSession(session: AuthSession): void {
+  memoryToken = session.access_token;
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(TOKEN_KEY, session.access_token);
+  window.localStorage.setItem(ROLE_KEY, session.role);
+  window.localStorage.setItem(SUBJECT_KEY, session.subject);
+}
+
+export async function ensureAuthSession(role: "operator" | "observer" = "operator"): Promise<string> {
+  const existing = readStoredToken();
+  if (existing) return existing;
+  if (!sessionPromise) {
+    sessionPromise = (async () => {
+      const response = await fetch(`${apiBase}/api/auth/session`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ role }),
+      });
+      if (!response.ok) {
+        throw new Error("Unable to establish a Sentinel operator session");
+      }
+      const session = authSessionSchema.parse(await response.json());
+      storeSession(session);
+      return session.access_token;
+    })().finally(() => {
+      sessionPromise = null;
+    });
+  }
+  return sessionPromise;
+}
+
+async function authHeaders(extra?: HeadersInit): Promise<Record<string, string>> {
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (extra) {
+    const normalized = new Headers(extra);
+    normalized.forEach((value, key) => {
+      headers[key] = value;
+    });
+  }
+  try {
+    const token = await ensureAuthSession("operator");
+    headers.Authorization = `Bearer ${token}`;
+  } catch {
+    /* read-only callers may still proceed without a token for public GETs */
+  }
+  return headers;
+}
+
 const vehicleSchema = z.object({
   id: z.string(),
   vehicle_definition_id: z.string(),
@@ -72,16 +155,29 @@ export const runSchema = z.object({
 
 export type Run = z.infer<typeof runSchema>;
 
+const auditEventSchema = z.object({
+  id: z.string(),
+  actor_subject: z.string(),
+  actor_role: z.string(),
+  action: z.string(),
+  resource_type: z.string(),
+  resource_id: z.string().nullable(),
+  details: z.record(z.string(), z.unknown()),
+  created_at: z.string(),
+});
+export type AuditEvent = z.infer<typeof auditEventSchema>;
+
 async function request<T>(path: string, init?: RequestInit, schema?: z.ZodType<T>): Promise<T> {
   const method = (init?.method ?? "GET").toUpperCase();
   const retryDelays = method === "GET" || method === "HEAD" ? [0, 300, 900] : [0];
   let response: Response | undefined;
+  const headers = await authHeaders(init?.headers);
   for (const delay of retryDelays) {
     if (delay > 0) await new Promise((resolve) => setTimeout(resolve, delay));
     try {
       response = await fetch(`${apiBase}${path}`, {
         ...init,
-        headers: { "Content-Type": "application/json", ...(init?.headers ?? {}) },
+        headers,
       });
       break;
     } catch {
@@ -103,17 +199,6 @@ async function request<T>(path: string, init?: RequestInit, schema?: z.ZodType<T
   if (response.status === 204) return undefined as T;
   const value: unknown = await response.json();
   return schema ? schema.parse(value) : (value as T);
-}
-
-function browserSessionHeaders(): Record<string, string> {
-  if (typeof window === "undefined") return {};
-  const key = "sentinel-session-id";
-  let value = window.localStorage.getItem(key);
-  if (!value) {
-    value = crypto.randomUUID();
-    window.localStorage.setItem(key, value);
-  }
-  return { "X-Session-Id": value };
 }
 
 export async function listMissions(cursor?: string): Promise<Mission[]> {
@@ -142,6 +227,22 @@ export async function addWaypoint(id: string, input: Record<string, unknown>): P
   return request(`/api/missions/${id}/waypoints`, { method: "POST", body: JSON.stringify(input) }, waypointSchema);
 }
 
+export async function generatePattern(
+  missionId: string,
+  input: {
+    pattern: "lawnmower" | "expanding_square";
+    vehicle_id: string;
+    center_latitude: number;
+    center_longitude: number;
+    altitude_m?: number;
+    spacing_m?: number;
+    legs?: number;
+    leg_length_m?: number;
+  },
+): Promise<Waypoint[]> {
+  return request(`/api/missions/${missionId}/patterns`, { method: "POST", body: JSON.stringify(input) }, z.array(waypointSchema));
+}
+
 export async function updateWaypoint(id: string, input: Record<string, unknown>): Promise<Waypoint> {
   return request(`/api/waypoints/${id}`, { method: "PATCH", body: JSON.stringify(input) }, waypointSchema);
 }
@@ -151,11 +252,11 @@ export async function deleteWaypoint(id: string): Promise<void> {
 }
 
 export async function createRun(id: string, input: { random_seed?: number; simulation_speed?: number; duration_limit_minutes?: number } = {}): Promise<Run> {
-  return request(`/api/missions/${id}/runs`, { method: "POST", headers: browserSessionHeaders(), body: JSON.stringify(input) }, runSchema);
+  return request(`/api/missions/${id}/runs`, { method: "POST", body: JSON.stringify(input) }, runSchema);
 }
 
 export async function launchDemo(): Promise<Run> {
-  return request("/api/demo/launch", { method: "POST", headers: browserSessionHeaders() }, runSchema);
+  return request("/api/demo/launch", { method: "POST" }, runSchema);
 }
 
 export async function getRun(id: string): Promise<Run> {
@@ -224,10 +325,17 @@ export async function getMetrics(runId: string): Promise<RunMetrics> {
   return request(`/api/runs/${runId}/metrics`, undefined, metricsSchema);
 }
 
+export async function getAuditEvents(resourceType?: string, resourceId?: string): Promise<AuditEvent[]> {
+  const query = new URLSearchParams({ limit: "100" });
+  if (resourceType) query.set("resource_type", resourceType);
+  if (resourceId) query.set("resource_id", resourceId);
+  return request(`/api/audit/events?${query.toString()}`, undefined, z.array(auditEventSchema));
+}
+
 export async function askAnalyst(runId: string, message: string): Promise<AnalystResponse> {
-  return request(`/api/runs/${runId}/assistant`, { method: "POST", headers: browserSessionHeaders(), body: JSON.stringify({ message }) }, analystSchema);
+  return request(`/api/runs/${runId}/assistant`, { method: "POST", body: JSON.stringify({ message }) }, analystSchema);
 }
 
 export async function getDebrief(runId: string): Promise<AnalystResponse> {
-  return request(`/api/runs/${runId}/debrief`, { method: "POST", headers: browserSessionHeaders() }, analystSchema);
+  return request(`/api/runs/${runId}/debrief`, { method: "POST" }, analystSchema);
 }

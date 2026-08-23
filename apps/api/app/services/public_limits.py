@@ -1,22 +1,14 @@
 from uuid import UUID
 
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.config import get_settings
 from app.db.models.entities import Mission, MissionVehicle, SimulationRun
 
 
-def session_key(session_id: str | None, forwarded_for: str | None) -> str:
-    return (session_id or (forwarded_for.split(",", 1)[0].strip() if forwarded_for else "anonymous"))[:128]
-
-
-def validate_telemetry_rate(telemetry_rate_hz: float) -> None:
-    settings = get_settings()
-    if telemetry_rate_hz > settings.simulation_tick_hz:
-        raise ValueError(
-            f"Telemetry rate cannot exceed the simulation tick rate of {settings.simulation_tick_hz:g} Hz"
-        )
+def session_key_from_subject(subject: str) -> str:
+    return subject[:128]
 
 
 async def ensure_vehicle_allowed(session: AsyncSession, mission_id: UUID, telemetry_rate_hz: float) -> None:
@@ -33,11 +25,22 @@ async def ensure_vehicle_allowed(session: AsyncSession, mission_id: UUID, teleme
         raise ValueError(f"Public demo telemetry rate limit is {settings.effective_max_telemetry_rate_hz:g} Hz")
 
 
+def validate_telemetry_rate(telemetry_rate_hz: float) -> None:
+    settings = get_settings()
+    if telemetry_rate_hz > settings.simulation_tick_hz:
+        raise ValueError(
+            f"Telemetry rate cannot exceed the simulation tick rate of {settings.simulation_tick_hz:g} Hz"
+        )
+
+
 async def ensure_run_allowed(session: AsyncSession, mission: Mission, session_id: str) -> None:
     settings = get_settings()
     if not settings.public_demo:
         return
-    rows = await session.execute(select(SimulationRun.configuration))
-    count = sum(1 for configuration in rows.scalars() if configuration.get("session_key") == session_id)
-    if count >= settings.max_runs_per_session:
+    count = await session.scalar(
+        select(func.count())
+        .select_from(SimulationRun)
+        .where(SimulationRun.session_key == session_id)
+    )
+    if (count or 0) >= settings.max_runs_per_session:
         raise ValueError(f"Public demo limit is {settings.max_runs_per_session} runs per session")

@@ -1,13 +1,14 @@
 from uuid import UUID
 
-from fastapi import APIRouter, Depends, Header, HTTPException
+from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.ext.asyncio import AsyncSession
 
 from app.api.schemas import RunCreate, RunRead, RunVehicleRead
+from app.auth import AuthPrincipal, require_operator
 from app.db.models.entities import SimulationRun
 from app.db.session import get_db_session
-from app.services import mission_service, run_service
-from app.services.public_limits import session_key
+from app.services import audit_service, mission_service, run_service
+from app.services.public_limits import session_key_from_subject
 
 router = APIRouter(tags=["runs"])
 
@@ -42,11 +43,22 @@ async def create_run(
     mission_id: UUID,
     payload: RunCreate,
     session: AsyncSession = Depends(get_db_session),
-    x_session_id: str | None = Header(default=None),
-    x_forwarded_for: str | None = Header(default=None),
+    principal: AuthPrincipal = Depends(require_operator),
 ) -> RunRead:
     try:
-        return to_run_read(await run_service.create_run(session, mission_id, payload, session_key(x_session_id, x_forwarded_for)))
+        run = await run_service.create_run(
+            session, mission_id, payload, session_key_from_subject(principal.subject)
+        )
+        await audit_service.record_audit(
+            session,
+            principal=principal,
+            action="run.create",
+            resource_type="run",
+            resource_id=run.id,
+            details={"mission_id": str(mission_id)},
+        )
+        await session.commit()
+        return to_run_read(run)
     except mission_service.MissionNotFound as exc:
         raise HTTPException(status_code=404, detail="Mission not found") from exc
     except run_service.RunConflict as exc:
@@ -80,9 +92,25 @@ async def get_run_vehicles(run_id: UUID, session: AsyncSession = Depends(get_db_
         raise HTTPException(status_code=404, detail="Run not found") from exc
 
 
-async def _command(run_id: UUID, action, session: AsyncSession) -> RunRead:
+async def _command(
+    run_id: UUID,
+    action,
+    session: AsyncSession,
+    principal: AuthPrincipal,
+    audit_action: str,
+) -> RunRead:
     try:
-        return to_run_read(await action(session, run_id))
+        run = await action(session, run_id)
+        await audit_service.record_audit(
+            session,
+            principal=principal,
+            action=audit_action,
+            resource_type="run",
+            resource_id=run.id,
+            details={"status": run.status.value},
+        )
+        await session.commit()
+        return to_run_read(run)
     except run_service.RunNotFound as exc:
         raise HTTPException(status_code=404, detail="Run not found") from exc
     except run_service.RunConflict as exc:
@@ -90,20 +118,36 @@ async def _command(run_id: UUID, action, session: AsyncSession) -> RunRead:
 
 
 @router.post("/runs/{run_id}/start", response_model=RunRead)
-async def start_run(run_id: UUID, session: AsyncSession = Depends(get_db_session)) -> RunRead:
-    return await _command(run_id, run_service.start_run, session)
+async def start_run(
+    run_id: UUID,
+    session: AsyncSession = Depends(get_db_session),
+    principal: AuthPrincipal = Depends(require_operator),
+) -> RunRead:
+    return await _command(run_id, run_service.start_run, session, principal, "run.start")
 
 
 @router.post("/runs/{run_id}/pause", response_model=RunRead)
-async def pause_run(run_id: UUID, session: AsyncSession = Depends(get_db_session)) -> RunRead:
-    return await _command(run_id, run_service.pause_run, session)
+async def pause_run(
+    run_id: UUID,
+    session: AsyncSession = Depends(get_db_session),
+    principal: AuthPrincipal = Depends(require_operator),
+) -> RunRead:
+    return await _command(run_id, run_service.pause_run, session, principal, "run.pause")
 
 
 @router.post("/runs/{run_id}/resume", response_model=RunRead)
-async def resume_run(run_id: UUID, session: AsyncSession = Depends(get_db_session)) -> RunRead:
-    return await _command(run_id, run_service.resume_run, session)
+async def resume_run(
+    run_id: UUID,
+    session: AsyncSession = Depends(get_db_session),
+    principal: AuthPrincipal = Depends(require_operator),
+) -> RunRead:
+    return await _command(run_id, run_service.resume_run, session, principal, "run.resume")
 
 
 @router.post("/runs/{run_id}/stop", response_model=RunRead)
-async def stop_run(run_id: UUID, session: AsyncSession = Depends(get_db_session)) -> RunRead:
-    return await _command(run_id, run_service.stop_run, session)
+async def stop_run(
+    run_id: UUID,
+    session: AsyncSession = Depends(get_db_session),
+    principal: AuthPrincipal = Depends(require_operator),
+) -> RunRead:
+    return await _command(run_id, run_service.stop_run, session, principal, "run.stop")

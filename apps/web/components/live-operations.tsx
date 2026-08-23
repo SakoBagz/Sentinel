@@ -2,15 +2,18 @@
 
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import * as maplibregl from "maplibre-gl";
+import { Marker, Popup, type Map as MapLibreMap } from "maplibre-gl";
 import { Pause, Play, Radio, Search, Square, TriangleAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { z } from "zod";
 
+import { AuditPanel } from "@/components/audit-panel";
 import { PageHeader } from "@/components/page-header";
 import { RunNavigation } from "@/components/run-navigation";
 import { StatusBadge, statusTone } from "@/components/status-badge";
-import { createFailure, failureTypes, getMetrics, getMission, getRun, getRunSnapshot, Mission, pauseRun, resumeRun, Run, RunMetrics, startRun, stopRun, FailureType } from "@/lib/api";
+import { VehicleInspectField } from "@/components/vehicle-inspect-field";
+import { createFailure, ensureAuthSession, failureTypes, getMetrics, getMission, getRun, getRunSnapshot, Mission, pauseRun, resumeRun, Run, RunMetrics, startRun, stopRun, FailureType } from "@/lib/api";
+import { createOpsMap, makeMarkerInteractive, setMarkerSelected, updateLineGeoJson, updateMarkerHeading, updateWhenStyleReady, type OpsLine } from "@/lib/ops-map";
 import { LiveEvent, MissionState, VehicleTelemetry, useLiveTelemetry } from "@/stores/live-telemetry";
 
 const envelopeSchema = z.object({
@@ -37,13 +40,12 @@ type LiveMapProps = {
 
 function LiveMap({ vehicles, history, plannedRoutes, callsigns, selectedVehicleId, onSelect }: LiveMapProps) {
   const node = useRef<HTMLDivElement>(null);
-  const map = useRef<maplibregl.Map | null>(null);
-  const markers = useRef<Record<string, maplibregl.Marker>>({});
+  const map = useRef<MapLibreMap | null>(null);
+  const markers = useRef<Record<string, Marker>>({});
 
   useEffect(() => {
     if (!node.current || map.current) return;
-    const instance = new maplibregl.Map({ container: node.current, style: "https://tiles.openfreemap.org/styles/liberty", center: [-118.24, 34.15], zoom: 10 });
-    instance.addControl(new maplibregl.NavigationControl(), "top-right");
+    const instance = createOpsMap(node.current);
     map.current = instance;
     return () => { instance.remove(); map.current = null; };
   }, []);
@@ -52,27 +54,15 @@ function LiveMap({ vehicles, history, plannedRoutes, callsigns, selectedVehicleI
     const instance = map.current;
     if (!instance) return;
     for (const [vehicleId, telemetry] of Object.entries(vehicles)) {
-      const marker = markers.current[vehicleId] ?? new maplibregl.Marker({ color: "#d9dde1" }).setLngLat([telemetry.longitude, telemetry.latitude]).addTo(instance);
-      marker.setLngLat([telemetry.longitude, telemetry.latitude]).setPopup(new maplibregl.Popup().setText(callsigns[vehicleId] ?? vehicleId));
-      const markerElement = marker.getElement();
-      markerElement.setAttribute("role", "button");
-      markerElement.setAttribute("aria-label", `${callsigns[vehicleId] ?? vehicleId} live position`);
-      let heading = markerElement.querySelector<HTMLElement>(".sentinel-marker-heading");
-      if (!heading) {
-        heading = document.createElement("span");
-        heading.className = "sentinel-marker-heading";
-        heading.textContent = "▲";
-        markerElement.appendChild(heading);
-      }
-      heading.style.transform = `rotate(${telemetry.headingDeg}deg)`;
-      marker.getElement().onclick = () => onSelect(vehicleId);
-      marker.getElement().tabIndex = 0;
-      marker.getElement().onkeydown = (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); onSelect(vehicleId); } };
+      const marker = markers.current[vehicleId] ?? new Marker({ color: "#d9dde1" }).setLngLat([telemetry.longitude, telemetry.latitude]).addTo(instance);
+      marker.setLngLat([telemetry.longitude, telemetry.latitude]).setPopup(new Popup().setText(callsigns[vehicleId] ?? vehicleId));
+      makeMarkerInteractive(marker, `${callsigns[vehicleId] ?? vehicleId} live position`, () => onSelect(vehicleId));
+      updateMarkerHeading(marker, telemetry.headingDeg);
       markers.current[vehicleId] = marker;
     }
     for (const [vehicleId, marker] of Object.entries(markers.current)) {
       if (!vehicles[vehicleId]) { marker.remove(); delete markers.current[vehicleId]; }
-      else marker.getElement().style.opacity = selectedVehicleId && selectedVehicleId !== vehicleId ? "0.45" : "1";
+      else setMarkerSelected(marker, !selectedVehicleId || selectedVehicleId === vehicleId);
     }
   }, [vehicles, selectedVehicleId, onSelect, callsigns]);
 
@@ -80,25 +70,15 @@ function LiveMap({ vehicles, history, plannedRoutes, callsigns, selectedVehicleI
     const instance = map.current;
     if (!instance) return;
     const updateLines = () => {
-      if (!instance.isStyleLoaded()) return;
-      const trails = Object.entries(history)
-        .filter(([, samples]) => samples.length > 1)
-        .map(([vehicleId, samples]) => ({ type: "Feature" as const, properties: { vehicleId }, geometry: { type: "LineString" as const, coordinates: samples.map((sample) => [sample.longitude, sample.latitude]) } }));
-      const routes = Object.entries(plannedRoutes)
-        .filter(([, coordinates]) => coordinates.length > 1)
-        .map(([vehicleId, coordinates]) => ({ type: "Feature" as const, properties: { vehicleId }, geometry: { type: "LineString" as const, coordinates } }));
-      for (const [sourceId, data] of [["sentinel-live-trails", trails], ["sentinel-planned-routes", routes]] as const) {
-        const source = instance.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
-        if (source) source.setData({ type: "FeatureCollection", features: data } as GeoJSON.FeatureCollection);
-        else {
-          instance.addSource(sourceId, { type: "geojson", data: { type: "FeatureCollection", features: data } });
-          instance.addLayer({ id: `${sourceId}-line`, type: "line", source: sourceId, paint: { "line-color": sourceId === "sentinel-planned-routes" ? "#aeb5bc" : "#f1f2f3", "line-width": 2, "line-opacity": sourceId === "sentinel-planned-routes" ? 0.66 : 0.86 } });
-        }
-      }
+      const trails: OpsLine[] = Object.entries(history).map(([id, samples]) => ({
+        id,
+        coordinates: samples.map((sample) => [sample.longitude, sample.latitude]),
+      }));
+      const routes: OpsLine[] = Object.entries(plannedRoutes).map(([id, coordinates]) => ({ id, coordinates }));
+      updateLineGeoJson(instance, { sourceId: "sentinel-live-trails", lines: trails, paint: { "line-color": "#f1f2f3", "line-width": 2, "line-opacity": 0.86 } });
+      updateLineGeoJson(instance, { sourceId: "sentinel-planned-routes", lines: routes, paint: { "line-color": "#aeb5bc", "line-width": 2, "line-opacity": 0.66 } });
     };
-    if (instance.isStyleLoaded()) updateLines();
-    else instance.once("load", updateLines);
-    return () => { instance.off("load", updateLines); };
+    return updateWhenStyleReady(instance, updateLines);
   }, [history, plannedRoutes]);
 
   return <div className="map-canvas" ref={node} />;
@@ -143,6 +123,7 @@ function telemetryFromSnapshot(value: NonNullable<Awaited<ReturnType<typeof getR
 }
 
 function OperationalDiagnostics({ metrics, metricsError, connection, duplicates, missing, outOfOrder }: { metrics: RunMetrics | null; metricsError: string | null; connection: string; duplicates: number; missing: number; outOfOrder: number }) {
+  const integrityNominal = duplicates === 0 && missing === 0 && outOfOrder === 0;
   return (
     <section className="card diagnostics-card" aria-label="Operational diagnostics">
       <div className="diagnostics-header"><div><div className="eyebrow">Operational diagnostics</div><h2>Control-plane health</h2></div><span className={`diagnostics-badge ${metrics ? "ready" : "warning"}`}><span className="status-dot" />{metrics ? "Durable metrics" : "Awaiting persistence"}</span></div>
@@ -152,7 +133,13 @@ function OperationalDiagnostics({ metrics, metricsError, connection, duplicates,
         <div className="metric"><span>p95 delivery latency</span><strong>{metrics ? `${metrics.latency_p95_ms.toFixed(1)} ms` : "—"}</strong></div>
         <div className="metric"><span>Communications availability</span><strong>{metrics ? `${metrics.communications_availability_percent.toFixed(1)}%` : "—"}</strong></div>
       </div>
-      <div className="diagnostic-foot"><span>WebSocket <strong>{connection}</strong></span><span>Browser gaps <strong>{missing}</strong></span><span>Duplicates <strong>{duplicates}</strong></span><span>Out of order <strong>{outOfOrder}</strong></span></div>
+      <div className="integrity-strip" aria-label="Live stream integrity">
+        <div className="integrity-strip-item" data-state={connection === "LIVE" ? "nominal" : "attention"}><span>WS</span><strong>{connection}</strong></div>
+        <div className="integrity-strip-item" data-state={missing === 0 ? "nominal" : "attention"}><span>MISSING</span><strong>{missing}</strong></div>
+        <div className="integrity-strip-item" data-state={duplicates === 0 ? "nominal" : "attention"}><span>DUP</span><strong>{duplicates}</strong></div>
+        <div className="integrity-strip-item" data-state={outOfOrder === 0 ? "nominal" : "attention"}><span>OOO</span><strong>{outOfOrder}</strong></div>
+        <div className="integrity-strip-summary" data-state={integrityNominal && connection === "LIVE" ? "nominal" : "attention"}>{integrityNominal ? "Sequence integrity nominal" : "Sequence anomalies detected"}</div>
+      </div>
       {metricsError && <div className="notice">Durable metrics are temporarily unavailable; the live telemetry stream remains active.</div>}
     </section>
   );
@@ -204,6 +191,32 @@ function EventTimeline({ events, search, severity, warningsFirst, onSearch, onSe
   );
 }
 
+function FaultTimeline({ events }: { events: LiveEvent[] }) {
+  const faults = events
+    .filter((event) => event.severity !== "INFO" || /failure|fault|blackout|packet|latency|gps|battery|sensor|service/i.test(event.type))
+    .sort((left, right) => right.simTimeMs - left.simTimeMs)
+    .slice(0, 6);
+  return (
+    <section className="inspector-section" aria-labelledby="fault-timeline-heading">
+      <div className="eyebrow">Fault timeline</div>
+      <h3 id="fault-timeline-heading">Recent impairments</h3>
+      {faults.length === 0 ? (
+        <div className="event-empty">No simulated faults or elevated-severity events observed.</div>
+      ) : (
+        <div className="fault-timeline">
+          {faults.map((event) => (
+            <div className="fault-timeline-event" key={event.eventId}>
+              <span className="fault-timeline-time">{event.simTimeMs} ms</span>
+              <strong>{event.type}</strong>
+              <span>{event.vehicleId ?? "SYSTEM"} · {event.severity}</span>
+            </div>
+          ))}
+        </div>
+      )}
+    </section>
+  );
+}
+
 export function LiveOperations({ runId }: { runId: string }) {
   const [run, setRun] = useState<Run | null>(null);
   const [mission, setMission] = useState<Mission | null>(null);
@@ -219,6 +232,7 @@ export function LiveOperations({ runId }: { runId: string }) {
   const [eventSeverityFilter, setEventSeverityFilter] = useState<"ALL" | LiveEvent["severity"]>("ALL");
   const [eventSearch, setEventSearch] = useState("");
   const [warningsFirst, setWarningsFirst] = useState(true);
+  const [auditRefreshKey, setAuditRefreshKey] = useState(0);
   const { vehicles, history, events, connection, selectedVehicleId, duplicates, missing, outOfOrder, setConnection, selectVehicle, ingestTelemetry, hydrateTelemetry, ingestEvent, reset } = useLiveTelemetry();
   const metricsLive = run?.status === "READY" || run?.status === "RUNNING" || run?.status === "PAUSED";
 
@@ -289,10 +303,17 @@ export function LiveOperations({ runId }: { runId: string }) {
     let disposed = false;
     let attempts = 0;
     const clearTimers = () => { if (retry) clearTimeout(retry); if (heartbeat) clearInterval(heartbeat); retry = undefined; heartbeat = undefined; };
-    const connect = () => {
+    const connect = async () => {
       if (disposed) return;
       setConnection(attempts > 0 ? "RECONNECTING" : "DISCONNECTED");
-      try { socket = new WebSocket(`${wsBase}/ws/runs/${runId}`); } catch { setConnection("RECONNECTING"); retry = setTimeout(connect, Math.min(10_000, 500 * 2 ** Math.min(attempts++, 5))); return; }
+      try {
+        const token = await ensureAuthSession("operator");
+        socket = new WebSocket(`${wsBase}/ws/runs/${runId}?token=${encodeURIComponent(token)}`);
+      } catch {
+        setConnection("RECONNECTING");
+        retry = setTimeout(connect, Math.min(10_000, 500 * 2 ** Math.min(attempts++, 5)));
+        return;
+      }
       socket.onopen = () => {
         attempts = 0;
         setConnection("LIVE");
@@ -326,6 +347,7 @@ export function LiveOperations({ runId }: { runId: string }) {
     try {
       const commandResult = action === "start" ? startRun(runId) : action === "pause" ? pauseRun(runId) : action === "resume" ? resumeRun(runId) : stopRun(runId);
       setRun(await commandResult);
+      setAuditRefreshKey((value) => value + 1);
     } catch (reason: unknown) { setError(reason instanceof Error ? reason.message : `Unable to ${action} run`); }
     finally { setStarting(false); }
   };
@@ -343,7 +365,10 @@ export function LiveOperations({ runId }: { runId: string }) {
   const inject = async () => {
     if (!targetVehicleId) return;
     setError(null);
-    try { await createFailure(runId, { vehicle_id: targetVehicleId, failure_type: failureType, duration_ms: failureDuration * 1000 }); }
+    try {
+      await createFailure(runId, { vehicle_id: targetVehicleId, failure_type: failureType, duration_ms: failureDuration * 1000 });
+      setAuditRefreshKey((value) => value + 1);
+    }
     catch (reason: unknown) { setError(reason instanceof Error ? reason.message : "Unable to inject simulated fault"); }
   };
 
@@ -379,11 +404,14 @@ export function LiveOperations({ runId }: { runId: string }) {
 
         <aside className="inspector" aria-label="Live run inspector">
           <header className="inspector-header"><div><div className="eyebrow">Run inspector</div><h2>{selected ? callsigns[selected.vehicleId] ?? "Vehicle detail" : "Vehicle detail"}</h2><p className="inspector-description">Latest decoded telemetry for the focused vehicle.</p></div></header>
+          {selected && <VehicleInspectField headingDeg={selected.headingDeg} batteryPercent={selected.batteryPercent} communicationsState={selected.communicationsState} callsign={callsigns[selected.vehicleId] ?? selected.vehicleId} />}
           <VehicleDetail selected={selected} />
           <FailureInjectionPanel run={run} selected={selected} failureType={failureType} failureDuration={failureDuration} failureVehicleId={failureVehicleId} busy={starting} onVehicleChange={setFailureVehicleId} onTypeChange={setFailureType} onDurationChange={setFailureDuration} onInject={inject} />
+          <FaultTimeline events={events} />
           <EventTimeline events={visibleEvents} search={eventSearch} severity={eventSeverityFilter} warningsFirst={warningsFirst} onSearch={setEventSearch} onSeverity={setEventSeverityFilter} onSort={() => setWarningsFirst((value) => !value)} />
         </aside>
       </div>
+      <AuditPanel runId={runId} refreshKey={auditRefreshKey} />
     </main>
   );
 }

@@ -53,3 +53,25 @@ historical panels remain usable if map tiles or WebGL are unavailable.
 
 **Reasoning:** Mapping improves operational context, but an external tile service or
 GPU capability should not make the application unusable or obscure the underlying data.
+
+## ADR-007 — Demo JWT sessions with RBAC-lite and append-only audit
+
+**Decision:** Issue signed HS256 JWTs (`operator` or `observer`) from
+`POST /api/auth/session`. Require a valid token for mutating REST and WebSocket
+subscribe. Persist append-only `audit_events` for mission create, run lifecycle,
+fault inject/clear, and analysis queries. Stop treating `X-Forwarded-For` as identity;
+public-demo quotas key off the JWT subject (and an indexed `session_key` on runs).
+
+**Reasoning:** Defense-adjacent reviewers expect visible access control and an audit
+trail. This is demo-grade security literacy—not a replacement for corporate IdP,
+OIDC, mTLS, or multi-tenant ACLs. Production deployments should swap the demo issuer
+for an organizational identity provider while keeping the same role and audit seams.
+
+## ADR-008 — Soft AOI geofence and SAR pattern helpers are simulation aids
+
+**Decision:** Survey-box / AOI geofence exits emit warning events; SAR lawnmower and
+expanding-square helpers generate waypoints in the planner. Neither claims GIS-grade
+spatial analysis nor autonomy.
+
+**Reasoning:** Civilian search-pattern and constraint events deepen the ops story
+operators recognize without entering weapons, targeting, or classified C2 territory.

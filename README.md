@@ -1,74 +1,72 @@
 # Sentinel
 
 [![CI](https://github.com/SakoBagz/Sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/SakoBagz/Sentinel/actions/workflows/ci.yml)
+[![License: MIT](https://img.shields.io/badge/License-MIT-slate.svg)](LICENSE)
 
-Sentinel is a real-time UAV mission-operations simulator built as a full-stack
-systems project. It lets an operator define a benign mission, run a deterministic
-simulation, observe live fleet telemetry, introduce controlled communications faults,
-and inspect the persisted result through replay and operational analysis.
+**Deterministic mission-operations simulator for realtime systems engineering.**
 
-The project is intentionally focused on software systems behavior: stateful workflows,
-event contracts, unreliable delivery, durable history, deterministic execution, and
-clear operator feedback.
+Sentinel proves software behavior under unreliable delivery: an operator defines a
+benign UAV mission, runs a seeded simulation, observes live fleet telemetry, injects
+controlled communications faults, and inspects durable evidence through replay and
+operational analysis—without rerunning the simulator.
+
+UAV flight is the *scenario*. The engineering claim is the pipeline:
+versioned telemetry contracts, Redis Streams fan-out, PostgreSQL durability,
+deterministic replay, and auditable operator actions.
+
+## Engineering map
+
+| Capability | Where to look |
+| --- | --- |
+| Seeded deterministic ticks | [`simulator/sentinel_sim/engine.py`](simulator/sentinel_sim/engine.py) |
+| Unreliable delivery (loss, jitter, blackout) | [`simulator/sentinel_sim/network.py`](simulator/sentinel_sim/network.py) |
+| Backpressured durable persistence | [`apps/api/app/realtime/persistence.py`](apps/api/app/realtime/persistence.py) |
+| Slow-client WebSocket shedding | [`apps/api/app/realtime/hub.py`](apps/api/app/realtime/hub.py) |
+| Demo operator/observer auth + audit log | [`apps/api/app/auth/`](apps/api/app/auth/), `audit_events` |
+| Live → replay → evidence debrief | `/runs/{id}/live` → `/replay` → `/debrief` |
+| Measured local scale (not cloud capacity) | [`benchmark-results/`](benchmark-results/) |
 
 ## Product flow
 
-1. **Define** a mission, assign a fleet, and place route points on the map.
-2. **Operate** the run through live WebSocket telemetry, diagnostics, and auditable
-   simulated failures.
-3. **Review** persisted metrics, event history, replay state, and evidence-backed
-   analysis without rerunning the simulation.
+1. **Define** a mission, assign a fleet, place routes (or generate SAR search patterns).
+2. **Operate** through live WebSocket telemetry, integrity counters, and auditable faults.
+3. **Review** persisted metrics, event history, replay, audit trail, and evidence-backed analysis.
 
-The landing page also provides a seeded Angeles Forest run so the core workflow can be
-explored immediately.
+The landing page **Launch seeded run** creates the Angeles Forest Survey (25 UAVs with
+seeded blackout / battery / packet-loss incidents) and opens live operations.
 
 ## Engineering highlights
 
-- Next.js App Router interface with strict TypeScript and accessible stateful controls.
-- FastAPI modular monolith with typed boundary validation and explicit domain services.
-- PostgreSQL as the durable system of record.
-- Redis/Valkey Streams for transient event fan-out and reconnectable WebSockets.
-- Seeded simulator clock and random source for repeatable run traces.
-- Versioned telemetry and event envelopes with event IDs and per-vehicle sequences.
-- Authoritative per-vehicle telemetry scheduling with simulation-time determinism.
-- Bounded, backpressured durable processing with deterministic persistence downsampling.
-- Incremental network integrity accounting and a durable per-run telemetry summary.
-- MapLibre live/replay views with planned routes, trails, and vehicle heading state.
-- Bounded failure injection for communications, latency, packet delivery, GPS, battery,
-  sensor, and service conditions.
-- Read-only post-run analysis linked to persisted event evidence.
+- Next.js App Router UI with strict TypeScript, MapLibre ops maps, and a telemetry-bound
+  Three.js vehicle inspect panel (homepage craft is visual-only).
+- FastAPI modular monolith with typed boundaries, demo JWT sessions, and RBAC-lite
+  (`operator` mutate / `observer` read).
+- PostgreSQL as the durable system of record; Redis Streams for transient fan-out.
+- Seeded simulator clock/RNG; versioned envelopes with event IDs and per-vehicle sequences.
+- Bounded failure injection (comms, latency, packet loss, GPS, battery, sensor, service).
+- Append-only audit events for mission create, run lifecycle, faults, and analysis.
+- CI: migrations, pytest (API + simulator), Ruff, `tsc`, ESLint, Vitest, Compose Playwright golden path.
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    UI[Next.js operator UI] -->|REST configuration and history| API[FastAPI modular monolith]
-    UI <-->|WebSocket telemetry and events| API
+    UI[Next.js operator UI] -->|REST plus JWT| API[FastAPI modular monolith]
+    UI <-->|WebSocket telemetry| API
     API --> DB[(PostgreSQL)]
-    API <--> STREAM[(Redis / Valkey Streams)]
+    API <--> STREAM[(Redis Streams)]
     SIM[Deterministic simulator] -->|versioned envelopes| STREAM
     API --> ANALYSIS[Read-only operational analysis]
     ANALYSIS --> DB
 ```
 
 The simulator does not wait synchronously for database writes. REST owns configuration
-and historical queries; WebSockets carry transient browser updates; replay reads only
-from persisted telemetry and events.
-
-## Repository map
-
-```text
-apps/api/       FastAPI application, domain services, migrations, and API tests
-apps/web/       Next.js application, unit tests, and Playwright acceptance tests
-simulator/      Deterministic mission engine and network/battery models
-scripts/        Seed, cleanup, simulator-only, and integrated benchmark utilities
-docs/           Architecture, contracts, product behavior, and operating notes
-infrastructure/ Deployment manifests for local and hosted environments
-```
+and history; WebSockets carry transient browser updates; replay reads only persisted
+samples and events.
 
 ## Quick start
 
-Requirements: Docker, Python 3.11+ (3.12 recommended), Node.js 22.x, and npm.
+Requirements: Docker, Python 3.12 recommended, Node.js 22.x, npm.
 
 ```bash
 nvm use
@@ -77,11 +75,10 @@ npm install
 docker compose up -d --build
 ```
 
-Open [http://localhost:3000](http://localhost:3000), then choose **Launch seeded run**
-or open the mission catalog to build a mission from scratch. The API health endpoint
-is available at [http://localhost:8000/api/health](http://localhost:8000/api/health).
+Open [http://localhost:3000](http://localhost:3000). API health:
+[http://localhost:8000/api/health](http://localhost:8000/api/health).
 
-For split local processes instead of the full Compose stack:
+Split local processes:
 
 ```bash
 docker compose up -d postgres redis
@@ -89,17 +86,41 @@ python3 -m pip install -r apps/api/requirements.txt
 PYTHONPATH=apps/api:simulator uvicorn app.main:app --reload --app-dir apps/api
 ```
 
-In another terminal:
-
 ```bash
 npm run dev:web
 ```
 
-## Validation
+## Hosted demo
 
-The repository's CI workflow runs migrations, backend and simulator tests, Ruff static
-checks, strict TypeScript, ESLint, Vitest, a production Next.js build, and the browser
-golden path against the built Compose stack.
+Deploy the UI on Vercel and the API on Render. Full steps:
+[infrastructure/vercel/README.md](infrastructure/vercel/README.md).
+
+Summary:
+
+1. Deploy API + PostgreSQL + Redis on Render (`infrastructure/render/render.yaml`).
+2. Import this repo on Vercel with **Root Directory** = `apps/web`.
+3. Set `NEXT_PUBLIC_API_BASE_URL` and `NEXT_PUBLIC_WS_BASE_URL` to your API host.
+4. Set Render `WEB_ORIGIN` to your Vercel URL and `AUTH_SECRET` to a long random value.
+
+Demo auth uses signed session JWTs with role claims—it is not a production IdP. See
+ADR-007 in [`docs/DECISIONS.md`](docs/DECISIONS.md).
+
+## Measured benchmarks (local, in-process)
+
+Hardware and methodology are recorded in each JSON file under
+[`benchmark-results/`](benchmark-results/). Summary (3 simulated seconds, 10 Hz, seed 42):
+
+| Vehicles | Generated | Throughput msg/s | Tick p95 ms | Errors |
+| ---: | ---: | ---: | ---: | ---: |
+| 100 | 3000 | ~27k | ~3.8 | 0 |
+| 250 | 7500 | ~27k | ~9.5 | 0 |
+| 500 | 15000 | ~27k | ~19 | 0 |
+| 1000 | 30000 | ~27k | ~38 | 0 |
+
+These measure the **in-process simulator + sink**, not Redis/Postgres/browser latency and
+not cloud production capacity. Re-run with `python3 scripts/benchmark.py`.
+
+## Validation
 
 ```bash
 make test
@@ -109,34 +130,30 @@ npm run build
 npm --workspace apps/web run test:e2e
 ```
 
-The end-to-end command expects the Compose API and web services to be running. CI
-installs its own browser runtime.
-
-The benchmark harnesses are intentionally separate. `scripts/benchmark.py` measures
-the in-process simulator and sink. `scripts/integrated_benchmark.py` measures the
-local `SimulationEngine → NetworkSimulator → Redis Streams → PersistenceWorker →
-PostgreSQL` path and requires the Compose PostgreSQL/Redis services plus an applied
-Alembic schema. Neither harness is a production-capacity claim.
-
 ## Documentation
 
-- [Project overview](docs/PROJECT_OVERVIEW.md) — product workflow and engineering proof points.
-- [Architecture](docs/ARCHITECTURE.md) — module boundaries and data flow.
-- [API contract](docs/API.md) — REST resources and error semantics.
-- [Web application guide](docs/WEB_APP_GUIDE.md) — screen responsibilities and state rules.
-- [Analysis service](docs/ANALYSIS.md) — read-only summaries and evidence links.
-- [Replay model](docs/REPLAY.md) — persisted playback and historical fidelity.
-- [Performance plan](docs/PERFORMANCE.md) — benchmark methodology and disclosure rules.
+- [Project walkthrough](docs/WALKTHROUGH.md) — demo flow, failure modes, technical notes
+- [Project overview](docs/PROJECT_OVERVIEW.md)
+- [Architecture](docs/ARCHITECTURE.md)
+- [API contract](docs/API.md)
+- [Performance](docs/PERFORMANCE.md) — goals vs measured results
+- [Web application guide](docs/WEB_APP_GUIDE.md)
+- [Decisions (ADRs)](docs/DECISIONS.md)
+
+## Explicit non-claims
+
+- Not aerodynamics CFD, not a flight controller, not a weapons or targeting system.
+- Analysis defaults to a **mock** provider unless `ANALYSIS_PROVIDER` / API key is set.
+- Hosted limits (when enabled) are intentionally lower than local benchmark profiles.
+- Demo JWT auth demonstrates access-control literacy; it is not FedRAMP/IdP-ready security.
 
 ## Operational boundary
 
-Sentinel supports simulated search and rescue, wildfire monitoring, environmental
-surveys, infrastructure inspection, mapping, and communications relay. It does not
-implement weapon control, targeting, strike planning, autonomous engagement, firing
-solutions, or evasion capabilities.
+Supported scenarios: search and rescue, wildfire monitoring, environmental surveys,
+infrastructure inspection, mapping, communications relay. Sentinel does not implement
+weapon control, targeting, strike planning, autonomous engagement, firing solutions,
+or evasion capabilities.
 
 ## License
 
-No open-source license has been selected yet. Until one is added, the repository is
-available for viewing and evaluation but should not be redistributed as a third-party
-package.
+MIT — see [LICENSE](LICENSE).

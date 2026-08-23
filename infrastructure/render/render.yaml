@@ -12,6 +12,8 @@ services:
         value: "true"
       - key: WEB_ORIGIN
         sync: false
+      - key: AUTH_SECRET
+        sync: false
       - key: ANALYSIS_PROVIDER
         value: mock
       - key: DATABASE_URL

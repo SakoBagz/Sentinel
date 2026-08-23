@@ -2,16 +2,17 @@
 
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import * as maplibregl from "maplibre-gl";
+import { Marker, Popup, type Map as MapLibreMap } from "maplibre-gl";
 import { AlertTriangle, Check, MapPin, Play, Plus, Save, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
 
 import { PageHeader } from "@/components/page-header";
 import { StatusBadge, statusTone } from "@/components/status-badge";
-import { addVehicle, addWaypoint, createRun, deleteWaypoint, getMission, Mission, updateMission, updateWaypoint, Waypoint } from "@/lib/api";
+import { addVehicle, addWaypoint, createRun, deleteWaypoint, generatePattern, getMission, Mission, updateMission, updateWaypoint, Waypoint } from "@/lib/api";
 import { scenarioLabel } from "@/lib/mission-catalog";
 import { evaluateMissionReadiness } from "@/lib/mission-readiness";
+import { createOpsMap, makeMarkerInteractive, updateLineGeoJson, updateWhenStyleReady, type OpsLine } from "@/lib/ops-map";
 
 type Props = { missionId: string };
 
@@ -44,13 +45,14 @@ function ReadinessPanel({ readiness }: { readiness: ReturnType<typeof evaluateMi
 
 export function MissionPlanner({ missionId }: Props) {
   const mapNode = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<maplibregl.Map | null>(null);
+  const mapRef = useRef<MapLibreMap | null>(null);
   const selectedVehicleRef = useRef<string | null>(null);
   const missionRef = useRef<Mission | null>(null);
-  const markersRef = useRef<maplibregl.Marker[]>([]);
+  const markersRef = useRef<Marker[]>([]);
   const [mission, setMission] = useState<Mission | null>(null);
   const [selectedVehicle, setSelectedVehicle] = useState("");
   const [selectedWaypointId, setSelectedWaypointId] = useState<string | null>(null);
+  const [patternType, setPatternType] = useState<"lawnmower" | "expanding_square">("lawnmower");
   const [name, setName] = useState("");
   const [callsign, setCallsign] = useState("");
   const [busy, setBusy] = useState(false);
@@ -98,13 +100,7 @@ export function MissionPlanner({ missionId }: Props) {
 
   useEffect(() => {
     if (!missionLoaded || !mapNode.current || mapRef.current) return;
-    const map = new maplibregl.Map({
-      container: mapNode.current,
-      style: "https://tiles.openfreemap.org/styles/liberty",
-      center: [-118.24, 34.15],
-      zoom: 10,
-    });
-    map.addControl(new maplibregl.NavigationControl(), "top-right");
+    const map = createOpsMap(mapNode.current);
     let styleLoaded = false;
     map.once("load", () => {
       styleLoaded = true;
@@ -154,20 +150,16 @@ export function MissionPlanner({ missionId }: Props) {
     markersRef.current = mission.waypoints.map((waypoint) => {
       const callsign = mission.vehicles.find((vehicle) => vehicle.id === waypoint.vehicle_id)?.callsign ?? "Unassigned UAV";
       const waypointLabel = `${callsign} · Waypoint ${waypoint.sequence + 1} · ${waypoint.action}`;
-      const marker = new maplibregl.Marker({ color: "#d9dde1" })
+      const marker = new Marker({ color: "#d9dde1" })
         .setDraggable(true)
         .setLngLat([waypoint.longitude, waypoint.latitude])
-        .setPopup(new maplibregl.Popup().setText(waypointLabel))
+        .setPopup(new Popup().setText(waypointLabel))
         .addTo(map);
-      marker.getElement().setAttribute("role", "button");
-      marker.getElement().setAttribute("aria-label", waypointLabel);
       const selectMarker = () => {
         setSelectedWaypointId(waypoint.id);
         setSelectedVehicle(waypoint.vehicle_id ?? "");
       };
-      marker.getElement().addEventListener("click", selectMarker);
-      marker.getElement().tabIndex = 0;
-      marker.getElement().onkeydown = (event) => { if (event.key === "Enter" || event.key === " ") { event.preventDefault(); selectMarker(); } };
+      makeMarkerInteractive(marker, waypointLabel, selectMarker);
       marker.on("dragend", () => {
         const position = marker.getLngLat();
         setSelectedWaypointId(waypoint.id);
@@ -186,30 +178,22 @@ export function MissionPlanner({ missionId }: Props) {
     const map = mapRef.current;
     if (!map || !mission) return;
     const updateRoutes = () => {
-      if (!map.isStyleLoaded()) return;
       const byVehicle = new Map<string, Waypoint[]>();
       for (const waypoint of [...mission.waypoints].sort((left, right) => left.sequence - right.sequence)) {
         if (!waypoint.vehicle_id) continue;
         byVehicle.set(waypoint.vehicle_id, [...(byVehicle.get(waypoint.vehicle_id) ?? []), waypoint]);
       }
-      const features = [...byVehicle.entries()]
-        .filter(([, waypoints]) => waypoints.length > 1)
-        .map(([vehicleId, waypoints]) => ({
-          type: "Feature" as const,
-          properties: { vehicleId },
-          geometry: { type: "LineString" as const, coordinates: waypoints.map((item) => [item.longitude, item.latitude]) },
-        }));
-      const sourceId = "sentinel-planner-routes";
-      const source = map.getSource(sourceId) as maplibregl.GeoJSONSource | undefined;
-      if (source) source.setData({ type: "FeatureCollection", features } as GeoJSON.FeatureCollection);
-      else {
-        map.addSource(sourceId, { type: "geojson", data: { type: "FeatureCollection", features } });
-        map.addLayer({ id: "sentinel-planner-routes-line", type: "line", source: sourceId, paint: { "line-color": "#d9dde1", "line-width": 3, "line-opacity": 0.82 } });
-      }
+      const lines: OpsLine[] = [...byVehicle.entries()].map(([id, waypoints]) => ({
+        id,
+        coordinates: waypoints.map((item) => [item.longitude, item.latitude]),
+      }));
+      updateLineGeoJson(map, {
+        sourceId: "sentinel-planner-routes",
+        lines,
+        paint: { "line-color": "#d9dde1", "line-width": 3, "line-opacity": 0.82 },
+      });
     };
-    if (map.isStyleLoaded()) updateRoutes();
-    else map.once("load", updateRoutes);
-    return () => { map.off("load", updateRoutes); };
+    return updateWhenStyleReady(map, updateRoutes);
   }, [mission]);
 
   const saveMission = async () => {
@@ -300,6 +284,32 @@ export function MissionPlanner({ missionId }: Props) {
     }
   };
 
+  const generateSelectedPattern = async () => {
+    const map = mapRef.current;
+    if (!selectedVehicle || !map) {
+      setError("Select a UAV and wait for the map before generating a route pattern.");
+      return;
+    }
+    const center = map.getCenter();
+    setBusy(true);
+    setError(null);
+    try {
+      await generatePattern(missionId, {
+        pattern: patternType,
+        vehicle_id: selectedVehicle,
+        center_latitude: center.lat,
+        center_longitude: center.lng,
+        altitude_m: 100,
+      });
+      setSelectedWaypointId(null);
+      await reload();
+    } catch (reason: unknown) {
+      setError(reason instanceof Error ? reason.message : "Unable to generate route pattern");
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (!mission) return <main className="main"><div className="surface loading-state" role="status">{error ?? "Loading mission definition…"}</div></main>;
 
   return (
@@ -360,6 +370,14 @@ export function MissionPlanner({ missionId }: Props) {
             <div className="metric"><span>Route points</span><strong>{mission.waypoints.length}</strong></div>
             <div className="mission-objective"><div className="eyebrow">Objective</div><p>{mission.description ?? "No objective recorded. Add one from the mission catalog when creating a definition."}</p></div>
             <div className="settings-actions"><button className="button" type="button" disabled={busy || !nameDirty} onClick={saveMission}><Save size={13} aria-hidden="true" /> Save name</button><span className="save-state">{nameDirty ? "Unsaved name" : "Name saved"}</span></div>
+          </section>
+
+          <section className="inspector-section">
+            <div className="eyebrow">Pattern generator</div>
+            <h3>Survey route</h3>
+            <p>Generate a simulation route for the selected UAV around the current map center.</p>
+            <label className="field">Pattern<select value={patternType} onChange={(event) => setPatternType(event.target.value as typeof patternType)}><option value="lawnmower">Lawnmower sweep</option><option value="expanding_square">Expanding square</option></select></label>
+            <button className="button pattern-generate-button" type="button" disabled={busy || !selectedVehicle || !basemapReady} onClick={generateSelectedPattern}>Generate pattern</button>
           </section>
 
           <section className="inspector-section">

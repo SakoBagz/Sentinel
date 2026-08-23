@@ -1,0 +1,42 @@
+{
+  "configuration": {
+    "duration_seconds": 3.0,
+    "measurement": "in-process simulator plus in-process idempotent sink",
+    "seed": 42,
+    "telemetry_rate_hz": 10.0,
+    "tick_hz": 10.0,
+    "vehicles": 100
+  },
+  "environment": {
+    "cpu_count": 4,
+    "docker_server_version": null,
+    "machine": "x86_64",
+    "os": "Linux-6.12.94+-x86_64-with-glibc2.39",
+    "processor": "x86_64",
+    "python": "3.12.3"
+  },
+  "messages": {
+    "delivered": 3000,
+    "duplicates": 0,
+    "errors": 0,
+    "generated": 3000,
+    "missing": 0,
+    "out_of_order": 0,
+    "persisted": 3000
+  },
+  "performance": {
+    "cpu_seconds": 0.11356136,
+    "error_rate": 0.0,
+    "latency_p50_ms": 0.0,
+    "latency_p95_ms": 0.0,
+    "latency_p99_ms": 0.0,
+    "memory_peak_bytes": 25010176,
+    "throughput_generated_per_second": 26967.384162376165,
+    "tick_mean_ms": 3.7058607666646517,
+    "tick_p50_ms": 3.704713000047377,
+    "tick_p95_ms": 3.758735649932987,
+    "tick_p99_ms": 4.140609699948072,
+    "wall_seconds": 0.11124549500004832
+  },
+  "run_id": "7b87eb73-1429-5681-a653-3b1d49231803"
+}
