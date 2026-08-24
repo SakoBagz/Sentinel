@@ -2,8 +2,8 @@ import { z } from "zod";
 
 import type { MissionScenario } from "@/lib/mission-catalog";
 
-// Empty/default keeps browser calls same-origin so Next can proxy to the API
-// (works for local split processes and Cursor/cloud port forwarding).
+// Empty default keeps browser calls same-origin so Next.js can proxy to the API
+// during local development (split processes or Docker Compose).
 const apiBase = process.env.NEXT_PUBLIC_API_BASE_URL ?? "";
 
 const TOKEN_KEY = "sentinel-access-token";

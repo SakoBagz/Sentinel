@@ -24,7 +24,7 @@ After completion, the debrief surface reads durable metrics and integrity counte
 PostgreSQL. Replay uses persisted telemetry and event history, allowing an operator to
 seek to an exact simulation time without starting the simulator again.
 
-## Engineering proof points
+## System capabilities
 
 | Concern | Implementation | Where to inspect it |
 | --- | --- | --- |

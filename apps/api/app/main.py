@@ -41,8 +41,8 @@ async def lifespan(_: FastAPI):
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name, version="0.1.0", lifespan=lifespan)
-# In development, allow any localhost/preview origin so Cursor port-forward and
-# same-origin Next proxies keep working without a WEB_ORIGIN edit each time.
+# In development, allow any localhost/preview origin so local proxies and
+# forwarded ports keep working without editing WEB_ORIGIN each time.
 _cors_origins = (
     ["*"]
     if settings.app_env.lower() in {"development", "dev", "local"}
