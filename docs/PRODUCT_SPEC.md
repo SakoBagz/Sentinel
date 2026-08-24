@@ -5,9 +5,9 @@ Status: implementation baseline
 ## Product definition
 
 Sentinel is a real-time mission-planning, UAV fleet simulation, telemetry-monitoring,
-failure-injection, replay, performance-analysis, and operational-debrief platform. It
-demonstrates software-systems engineering through a benign UAV operations domain; it
-is not an aerodynamics or weapons system.
+failure-injection, replay, performance-analysis, and operational-debrief platform.
+It models benign UAV operations for systems engineering; it is not an aerodynamics
+or weapons system.
 
 The primary user journey is:
 

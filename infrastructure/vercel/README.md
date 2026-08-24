@@ -129,9 +129,11 @@ vercel --prod
 
 | Service | Typical free tier |
 | --- | --- |
-| Vercel | Hobby — static/SSR frontend |
+| Vercel | Hobby — Next.js frontend |
 | Render | Free web service (spins down on idle) |
 | PostgreSQL / Redis | Provider free tiers with storage limits |
 
 Hosted limits (`PUBLIC_DEMO=true`): 50 vehicles, 5 Hz telemetry, 5 runs per session.
 See [`docs/DEPLOYMENT.md`](../../docs/DEPLOYMENT.md).
+
+For a free-tier split, PostgreSQL can also come from Neon/Supabase and Redis from Upstash; the API still needs a long-running host for the simulator and WebSockets.

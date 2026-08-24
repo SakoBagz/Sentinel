@@ -1,72 +1,83 @@
 # Sentinel
 
 [![CI](https://github.com/SakoBagz/Sentinel/actions/workflows/ci.yml/badge.svg)](https://github.com/SakoBagz/Sentinel/actions/workflows/ci.yml)
-[![License: MIT](https://img.shields.io/badge/License-MIT-slate.svg)](LICENSE)
+[![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
+[![Python](https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white)](apps/api)
+[![Next.js](https://img.shields.io/badge/Next.js-15-000000?logo=next.js&logoColor=white)](apps/web)
+[![TypeScript](https://img.shields.io/badge/TypeScript-5-3178C6?logo=typescript&logoColor=white)](apps/web)
+[![PostgreSQL](https://img.shields.io/badge/PostgreSQL-16-4169E1?logo=postgresql&logoColor=white)](docs/DATABASE.md)
+[![Redis](https://img.shields.io/badge/Redis_Streams-7-DC382D?logo=redis&logoColor=white)](docs/REALTIME.md)
 
-**Deterministic mission-operations simulator for realtime systems engineering.**
+**Realtime mission-operations platform for simulated UAV fleets** — plan missions, stream telemetry under unreliable delivery, inject faults, and replay durable evidence without re-running the simulator.
 
-Sentinel proves software behavior under unreliable delivery: an operator defines a
-benign UAV mission, runs a seeded simulation, observes live fleet telemetry, injects
-controlled communications faults, and inspects durable evidence through replay and
-operational analysis—without rerunning the simulator.
+<p align="center">
+  <img src="docs/assets/live-ops.jpg" alt="Sentinel live operations dashboard with fleet map, telemetry, and vehicle inspector" width="100%" />
+</p>
 
-UAV flight is the *scenario*. The engineering claim is the pipeline:
-versioned telemetry contracts, Redis Streams fan-out, PostgreSQL durability,
-deterministic replay, and auditable operator actions.
-
-## Engineering map
-
-| Capability | Where to look |
+| Landing | Mission catalog |
 | --- | --- |
-| Seeded deterministic ticks | [`simulator/sentinel_sim/engine.py`](simulator/sentinel_sim/engine.py) |
-| Unreliable delivery (loss, jitter, blackout) | [`simulator/sentinel_sim/network.py`](simulator/sentinel_sim/network.py) |
-| Backpressured durable persistence | [`apps/api/app/realtime/persistence.py`](apps/api/app/realtime/persistence.py) |
-| Slow-client WebSocket shedding | [`apps/api/app/realtime/hub.py`](apps/api/app/realtime/hub.py) |
-| Demo operator/observer auth + audit log | [`apps/api/app/auth/`](apps/api/app/auth/), `audit_events` |
-| Live → replay → evidence debrief | `/runs/{id}/live` → `/replay` → `/debrief` |
-| Measured local scale (not cloud capacity) | [`benchmark-results/`](benchmark-results/) |
+| <img src="docs/assets/home.jpg" alt="Sentinel landing page" /> | <img src="docs/assets/missions.jpg" alt="Mission definitions catalog" /> |
 
-## Product flow
+## Why this project
 
-1. **Define** a mission, assign a fleet, place routes (or generate SAR search patterns).
-2. **Operate** through live WebSocket telemetry, integrity counters, and auditable faults.
-3. **Review** persisted metrics, event history, replay, audit trail, and evidence-backed analysis.
+Most demos stop at a happy-path map. Sentinel focuses on the hard part of realtime systems:
 
-The landing page **Launch seeded run** creates the Angeles Forest Survey (25 UAVs with
-seeded blackout / battery / packet-loss incidents) and opens live operations.
+- **Deterministic simulation** with seeded clocks and reproducible runs
+- **Unreliable delivery** (loss, jitter, blackout) between vehicles and the control plane
+- **Durable history** in PostgreSQL so replay and debrief never invent samples
+- **Operator workflow** from mission definition → live ops → fault injection → replay → evidence-backed debrief
 
-## Engineering highlights
+UAV flight is the scenario domain. The engineering substance is the telemetry pipeline, contracts, and operator surfaces.
 
-- Next.js App Router UI with strict TypeScript, MapLibre ops maps, and a telemetry-bound
-  Three.js vehicle inspect panel (homepage craft is visual-only).
-- FastAPI modular monolith with typed boundaries, demo JWT sessions, and RBAC-lite
-  (`operator` mutate / `observer` read).
-- PostgreSQL as the durable system of record; Redis Streams for transient fan-out.
-- Seeded simulator clock/RNG; versioned envelopes with event IDs and per-vehicle sequences.
-- Bounded failure injection (comms, latency, packet loss, GPS, battery, sensor, service).
-- Append-only audit events for mission create, run lifecycle, faults, and analysis.
-- CI: migrations, pytest (API + simulator), Ruff, `tsc`, ESLint, Vitest, Compose Playwright golden path.
+## Tech stack
+
+| Layer | Stack |
+| --- | --- |
+| Frontend | Next.js (App Router), React, TypeScript, Zustand, MapLibre GL, Three.js |
+| API | FastAPI, Pydantic, SQLAlchemy async, Alembic |
+| Data | PostgreSQL (system of record), Redis Streams (transient fan-out) |
+| Simulation | Python deterministic engine (`simulator/`) |
+| Auth (demo) | Signed JWTs with `operator` / `observer` roles + append-only audit log |
+| CI | Pytest, Ruff, `tsc`, ESLint, Vitest, Playwright (Compose golden path) |
+
+## Features
+
+- **Mission planner** — fleet roster, map waypoints, pattern generation, readiness gates
+- **Live operations** — WebSocket telemetry, MapLibre fleet map, integrity counters, fault injection
+- **Replay** — seek persisted samples and events; no re-simulation
+- **Debrief / analysis** — read-only summaries grounded in stored event evidence
+- **Contracts** — versioned envelopes with event IDs and per-vehicle sequences
+- **Benchmarks** — checked-in local scale results under [`benchmark-results/`](benchmark-results/)
 
 ## Architecture
 
 ```mermaid
 flowchart LR
-    UI[Next.js operator UI] -->|REST plus JWT| API[FastAPI modular monolith]
+    UI[Next.js operator UI] -->|REST + JWT| API[FastAPI]
     UI <-->|WebSocket telemetry| API
     API --> DB[(PostgreSQL)]
     API <--> STREAM[(Redis Streams)]
     SIM[Deterministic simulator] -->|versioned envelopes| STREAM
-    API --> ANALYSIS[Read-only operational analysis]
+    API --> ANALYSIS[Read-only analysis]
     ANALYSIS --> DB
 ```
 
-The simulator does not wait synchronously for database writes. REST owns configuration
-and history; WebSockets carry transient browser updates; replay reads only persisted
-samples and events.
+The simulator does not block on database writes. REST owns configuration and history; WebSockets carry transient browser updates; replay reads only persisted samples and events.
+
+## Repository layout
+
+```text
+apps/web/          Next.js operator UI
+apps/api/          FastAPI modular monolith
+simulator/         Seeded simulation engine + network impairment
+docs/              Architecture, API, realtime, and product docs
+infrastructure/    Render / Vercel deployment notes
+benchmark-results/ Measured local in-process benchmarks
+```
 
 ## Quick start
 
-Requirements: Docker, Python 3.12 recommended, Node.js 22.x, npm.
+**Requirements:** Docker, Python 3.12+, Node.js 22.x, npm
 
 ```bash
 nvm use
@@ -75,51 +86,20 @@ npm install
 docker compose up -d --build
 ```
 
-Open [http://localhost:3000](http://localhost:3000). API health:
-[http://localhost:8000/api/health](http://localhost:8000/api/health)
-(or same-origin via the UI proxy: [http://localhost:3000/api/health](http://localhost:3000/api/health)).
+- UI: [http://localhost:3000](http://localhost:3000)
+- API health: [http://localhost:8000/api/health](http://localhost:8000/api/health)
+- Same-origin proxy via the UI: [http://localhost:3000/api/health](http://localhost:3000/api/health)
 
-Split local processes:
+Split processes (API/UI outside Compose):
 
 ```bash
 docker compose up -d postgres redis
 python3 -m pip install -r apps/api/requirements.txt
 PYTHONPATH=apps/api:simulator uvicorn app.main:app --reload --app-dir apps/api
-```
-
-```bash
 npm run dev:web
 ```
 
-## Hosted demo
-
-Deploy the UI on Vercel and the API on Render. Full steps:
-[infrastructure/vercel/README.md](infrastructure/vercel/README.md).
-
-Summary:
-
-1. Deploy API + PostgreSQL + Redis on Render (`infrastructure/render/render.yaml`).
-2. Import this repo on Vercel with **Root Directory** = `apps/web`.
-3. Set `NEXT_PUBLIC_API_BASE_URL` and `NEXT_PUBLIC_WS_BASE_URL` to your API host.
-4. Set Render `WEB_ORIGIN` to your Vercel URL and `AUTH_SECRET` to a long random value.
-
-Demo auth uses signed session JWTs with role claims—it is not a production IdP. See
-ADR-007 in [`docs/DECISIONS.md`](docs/DECISIONS.md).
-
-## Measured benchmarks (local, in-process)
-
-Hardware and methodology are recorded in each JSON file under
-[`benchmark-results/`](benchmark-results/). Summary (3 simulated seconds, 10 Hz, seed 42):
-
-| Vehicles | Generated | Throughput msg/s | Tick p95 ms | Errors |
-| ---: | ---: | ---: | ---: | ---: |
-| 100 | 3000 | ~27k | ~3.8 | 0 |
-| 250 | 7500 | ~27k | ~9.5 | 0 |
-| 500 | 15000 | ~27k | ~19 | 0 |
-| 1000 | 30000 | ~27k | ~38 | 0 |
-
-These measure the **in-process simulator + sink**, not Redis/Postgres/browser latency and
-not cloud production capacity. Re-run with `python3 scripts/benchmark.py`.
+From the landing page, **Launch seeded run** starts the Angeles Forest Survey (25 UAVs with seeded fault scenarios) and opens live operations.
 
 ## Validation
 
@@ -131,29 +111,40 @@ npm run build
 npm --workspace apps/web run test:e2e
 ```
 
+## Benchmarks (local, in-process)
+
+Hardware and methodology are recorded under [`benchmark-results/`](benchmark-results/). Summary (3 simulated seconds, 10 Hz, seed 42):
+
+| Vehicles | Messages | Throughput msg/s | Tick p95 ms | Errors |
+| ---: | ---: | ---: | ---: | ---: |
+| 100 | 3000 | ~27k | ~3.8 | 0 |
+| 250 | 7500 | ~27k | ~9.5 | 0 |
+| 500 | 15000 | ~27k | ~19 | 0 |
+| 1000 | 30000 | ~27k | ~38 | 0 |
+
+These measure the in-process simulator + sink, not Redis/Postgres/browser latency or cloud capacity. Re-run with `python3 scripts/benchmark.py`.
+
+## Deployment
+
+Reference layout: Next.js on **Vercel**, API + Postgres + Redis on **Render** (or equivalent).
+
+See [infrastructure/vercel/README.md](infrastructure/vercel/README.md) and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+
 ## Documentation
 
-- [Project walkthrough](docs/WALKTHROUGH.md) — demo flow, failure modes, technical notes
-- [Project overview](docs/PROJECT_OVERVIEW.md)
+- [Walkthrough](docs/WALKTHROUGH.md) — demo path and design notes
 - [Architecture](docs/ARCHITECTURE.md)
 - [API contract](docs/API.md)
-- [Performance](docs/PERFORMANCE.md) — goals vs measured results
-- [Web application guide](docs/WEB_APP_GUIDE.md)
-- [Decisions (ADRs)](docs/DECISIONS.md)
+- [Realtime](docs/REALTIME.md)
+- [Database](docs/DATABASE.md)
+- [Web app guide](docs/WEB_APP_GUIDE.md)
+- [ADRs](docs/DECISIONS.md)
 
-## Explicit non-claims
+## Scope
 
-- Not aerodynamics CFD, not a flight controller, not a weapons or targeting system.
-- Analysis defaults to a **mock** provider unless `ANALYSIS_PROVIDER` / API key is set.
-- Hosted limits (when enabled) are intentionally lower than local benchmark profiles.
-- Demo JWT auth demonstrates access-control literacy; it is not FedRAMP/IdP-ready security.
+Supported scenarios: search and rescue, wildfire monitoring, environmental surveys, infrastructure inspection, mapping, and communications relay.
 
-## Operational boundary
-
-Supported scenarios: search and rescue, wildfire monitoring, environmental surveys,
-infrastructure inspection, mapping, communications relay. Sentinel does not implement
-weapon control, targeting, strike planning, autonomous engagement, firing solutions,
-or evasion capabilities.
+Sentinel is a **simulation** platform — not aerodynamics CFD, not a flight controller, and not a weapons or targeting system. Demo JWT auth illustrates role-based access and auditability; it is not a production identity provider.
 
 ## License
 
