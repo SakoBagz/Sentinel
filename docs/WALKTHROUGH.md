@@ -29,7 +29,7 @@ Sentinel is a deterministic realtime telemetry platform: seeded simulation, unre
 - Mutating REST and WebSocket subscribe require a signed demo JWT (`operator` role).
 - `observer` tokens can read history, replay, and debrief but cannot inject faults or start/stop runs.
 - Append-only `audit_events` record who did what.
-- This is demo auth for local/hosted demos, not corporate SSO or multi-tenant ACL.
+- This is demo auth for local development, not corporate SSO or multi-tenant ACL.
 
 **Why Redis and PostgreSQL**
 
@@ -41,7 +41,7 @@ Sentinel is a deterministic realtime telemetry platform: seeded simulation, unre
 | Topic | Detail |
 | --- | --- |
 | Physics fidelity | Kinematic navigation + documented battery model; not aerodynamics CFD. |
-| Scale | Local in-process numbers are checked in; hosted demo profiles are intentionally capped. |
+| Scale | Local in-process numbers are checked in; optional demo rate limits exist for constrained hosts. |
 | Auth | Demo JWT + roles + audit; production deployments would use an organizational IdP. |
 | Three.js | Homepage craft + telemetry-bound inspect panel; operational map is MapLibre. |
 | Analysis | Mock provider by default; optional external provider; read-only tools only. |
