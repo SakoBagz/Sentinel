@@ -35,6 +35,14 @@ const VEHICLE_HALO_CASING_LAYER = "sentinel-vehicles-halo-casing";
 const VEHICLE_HALO_LAYER = "sentinel-vehicles-halo";
 const VEHICLE_CHEVRON_LAYER = "sentinel-vehicles-chevron";
 const VEHICLE_LABEL_LAYER = "sentinel-vehicles-label";
+const VEHICLE_LAYER_STACK = [
+  VEHICLE_HALO_CASING_LAYER,
+  VEHICLE_HALO_LAYER,
+  VEHICLE_CHEVRON_LAYER,
+  VEHICLE_LABEL_LAYER,
+] as const;
+
+const mapsNeedingVehicleLayerRaise = new WeakSet<MapLibreMap>();
 
 type VehicleFeatureCollection = {
   type: "FeatureCollection";
@@ -89,6 +97,55 @@ export const OPS_REPLAY_TRAIL_PAINT: NonNullable<LineLayerSpecification["paint"]
   "line-opacity": 0.88,
 };
 
+export function isValidCoordinate(longitude: number, latitude: number): boolean {
+  return (
+    Number.isFinite(longitude) &&
+    Number.isFinite(latitude) &&
+    Math.abs(latitude) <= 90 &&
+    Math.abs(longitude) <= 180
+  );
+}
+
+export function isValidOpsCoordinate([longitude, latitude]: OpsCoordinate): boolean {
+  return isValidCoordinate(longitude, latitude);
+}
+
+export function filterValidCoordinates(coordinates: OpsCoordinate[]): OpsCoordinate[] {
+  return coordinates.filter(isValidOpsCoordinate);
+}
+
+export function groupSamplesIntoLines(
+  samples: ReadonlyArray<{ vehicle_id: string; latitude: number | null; longitude: number | null }>,
+): OpsLine[] {
+  const byVehicle = new Map<string, OpsCoordinate[]>();
+  for (const sample of samples) {
+    if (!isValidCoordinate(sample.longitude ?? NaN, sample.latitude ?? NaN)) continue;
+    const history = byVehicle.get(sample.vehicle_id) ?? [];
+    history.push([sample.longitude!, sample.latitude!]);
+    byVehicle.set(sample.vehicle_id, history);
+  }
+  return [...byVehicle.entries()]
+    .map(([id, coordinates]) => ({ id, coordinates }))
+    .filter((line) => line.coordinates.length > 1);
+}
+
+export function buildLineFeatureCollection(lines: OpsLine[]): LineFeatureCollection {
+  return {
+    type: "FeatureCollection",
+    features: lines
+      .map((line) => ({
+        ...line,
+        coordinates: filterValidCoordinates(line.coordinates),
+      }))
+      .filter((line) => line.coordinates.length > 1)
+      .map((line) => ({
+        type: "Feature" as const,
+        properties: { id: line.id },
+        geometry: { type: "LineString" as const, coordinates: line.coordinates },
+      })),
+  };
+}
+
 export function createOpsMap(
   container: HTMLElement,
   options: Partial<Omit<MapOptions, "container">> = {},
@@ -104,6 +161,10 @@ export function createOpsMap(
   map.addControl(new NavigationControl({ visualizePitch: false }), "top-right");
   map.addControl(new ScaleControl({ maxWidth: 120, unit: "metric" }), "bottom-right");
   return map;
+}
+
+function lineLayerAnchor(map: MapLibreMap): string | undefined {
+  return map.getLayer(VEHICLE_HALO_CASING_LAYER) ? VEHICLE_HALO_CASING_LAYER : undefined;
 }
 
 export function updateLineGeoJson(
@@ -122,16 +183,7 @@ export function updateLineGeoJson(
 ): boolean {
   if (!map.isStyleLoaded()) return false;
 
-  const data: LineFeatureCollection = {
-    type: "FeatureCollection",
-    features: lines
-      .filter((line) => line.coordinates.length > 1)
-      .map((line) => ({
-        type: "Feature",
-        properties: { id: line.id },
-        geometry: { type: "LineString", coordinates: line.coordinates },
-      })),
-  };
+  const data = buildLineFeatureCollection(lines);
   const source = map.getSource(sourceId) as GeoJSONSource | undefined;
   if (source) {
     source.setData(data);
@@ -141,34 +193,59 @@ export function updateLineGeoJson(
         map.setPaintProperty(layerId, key as keyof typeof paint, value);
       }
     }
+    mapsNeedingVehicleLayerRaise.add(map);
     return true;
   }
 
   map.addSource(sourceId, { type: "geojson", data });
-  // Light casing so dark trails stay readable over both parks and dense streets.
-  map.addLayer({
-    id: `${layerId}-casing`,
-    type: "line",
-    source: sourceId,
-    paint: {
-      "line-color": "#ffffff",
-      "line-width": (typeof paint["line-width"] === "number" ? paint["line-width"] : 2) + 3,
-      "line-opacity": 0.7,
-      "line-blur": 0.35,
+  const beforeId = lineLayerAnchor(map);
+  map.addLayer(
+    {
+      id: `${layerId}-casing`,
+      type: "line",
+      source: sourceId,
+      paint: {
+        "line-color": "#ffffff",
+        "line-width": (typeof paint["line-width"] === "number" ? paint["line-width"] : 2) + 3,
+        "line-opacity": 0.7,
+        "line-blur": 0.35,
+      },
+      layout: { "line-cap": "round", "line-join": "round" },
     },
-    layout: { "line-cap": "round", "line-join": "round" },
-  }, map.getLayer(VEHICLE_HALO_CASING_LAYER) ? VEHICLE_HALO_CASING_LAYER : undefined);
-  map.addLayer({
-    id: layerId,
-    type: "line",
-    source: sourceId,
-    paint,
-    layout: { "line-cap": "round", "line-join": "round" },
-  }, map.getLayer(VEHICLE_HALO_CASING_LAYER) ? VEHICLE_HALO_CASING_LAYER : undefined);
+    beforeId,
+  );
+  map.addLayer(
+    {
+      id: layerId,
+      type: "line",
+      source: sourceId,
+      paint,
+      layout: { "line-cap": "round", "line-join": "round" },
+    },
+    beforeId,
+  );
   return true;
 }
 
-export function updateWhenStyleReady(map: MapLibreMap, update: () => void): () => void {
+/** Sync multiple line groups in one style-ready pass (avoids repeated layer-order work). */
+export function syncLineLayers(
+  map: MapLibreMap,
+  layers: Array<{
+    sourceId: string;
+    layerId?: string;
+    lines: OpsLine[];
+    paint: NonNullable<LineLayerSpecification["paint"]>;
+  }>,
+): boolean {
+  if (!map.isStyleLoaded()) return false;
+  for (const layer of layers) {
+    updateLineGeoJson(map, layer);
+  }
+  raiseVehicleLayersIfNeeded(map);
+  return true;
+}
+
+export function runWhenStyleReady(map: MapLibreMap, update: () => void): () => void {
   if (map.isStyleLoaded()) {
     update();
     return () => undefined;
@@ -177,14 +254,15 @@ export function updateWhenStyleReady(map: MapLibreMap, update: () => void): () =
   return () => map.off("load", update);
 }
 
+/** @deprecated Use {@link runWhenStyleReady}. */
+export const updateWhenStyleReady = runWhenStyleReady;
+
 export function fitCoordinates(
   map: MapLibreMap,
   coordinates: OpsCoordinate[],
   { padding = 72, maxZoom = 13, duration = 0 }: { padding?: number; maxZoom?: number; duration?: number } = {},
 ): void {
-  const valid = coordinates.filter(
-    ([lng, lat]) => Number.isFinite(lng) && Number.isFinite(lat) && Math.abs(lat) <= 90 && Math.abs(lng) <= 180,
-  );
+  const valid = filterValidCoordinates(coordinates);
   if (valid.length === 0) return;
   if (valid.length === 1) {
     map.easeTo({ center: valid[0], zoom: Math.min(maxZoom, 12.5), duration });
@@ -195,11 +273,28 @@ export function fitCoordinates(
   map.fitBounds(bounds, { padding, maxZoom, duration });
 }
 
+export function focusMapOnPoint(
+  map: MapLibreMap,
+  longitude: number,
+  latitude: number,
+  { minZoom = 12, duration = 400 }: { minZoom?: number; duration?: number } = {},
+): boolean {
+  if (!isValidCoordinate(longitude, latitude)) return false;
+  map.easeTo({
+    center: [longitude, latitude],
+    zoom: Math.max(map.getZoom(), minZoom),
+    duration,
+    essential: true,
+  });
+  return true;
+}
+
 export function buildVehicleFeatureCollection(vehicles: VehicleMapPoint[]): VehicleFeatureCollection {
-  const anySelected = vehicles.some((vehicle) => vehicle.selected);
+  const visible = vehicles.filter((vehicle) => isValidCoordinate(vehicle.longitude, vehicle.latitude));
+  const anySelected = visible.some((vehicle) => vehicle.selected);
   return {
     type: "FeatureCollection",
-    features: vehicles.map((vehicle) => ({
+    features: visible.map((vehicle) => ({
       type: "Feature",
       id: vehicle.vehicleId,
       geometry: { type: "Point", coordinates: [vehicle.longitude, vehicle.latitude] },
@@ -224,6 +319,18 @@ const VEHICLE_OPACITY: ExpressionSpecification = [
   0.95,
 ];
 
+const VEHICLE_TONE_RING: ExpressionSpecification = [
+  "match",
+  ["get", "tone"],
+  "healthy",
+  "rgba(46, 125, 74, 0.85)",
+  "degraded",
+  "rgba(166, 124, 28, 0.9)",
+  "critical",
+  "rgba(140, 40, 40, 0.95)",
+  "rgba(31, 95, 139, 0.55)",
+];
+
 function ensureVehicleLayers(map: MapLibreMap): void {
   if (!map.getSource(VEHICLE_SOURCE_ID)) {
     map.addSource(VEHICLE_SOURCE_ID, {
@@ -240,8 +347,8 @@ function ensureVehicleLayers(map: MapLibreMap): void {
       source: VEHICLE_SOURCE_ID,
       paint: {
         "circle-radius": 14,
-        "circle-color": "#ffffff",
-        "circle-opacity": ["*", VEHICLE_OPACITY, 0.72],
+        "circle-color": VEHICLE_TONE_RING,
+        "circle-opacity": ["*", VEHICLE_OPACITY, 0.35],
       },
     });
   }
@@ -307,20 +414,29 @@ function ensureVehicleLayers(map: MapLibreMap): void {
   }
 }
 
+function raiseVehicleLayersIfNeeded(map: MapLibreMap): void {
+  if (!mapsNeedingVehicleLayerRaise.has(map)) return;
+  for (const layerId of VEHICLE_LAYER_STACK) {
+    if (map.getLayer(layerId)) map.moveLayer(layerId);
+  }
+  mapsNeedingVehicleLayerRaise.delete(map);
+}
+
 /** Render fleet positions as map layers (stable under zoom; avoids HTML marker drift). */
 export function syncVehicleLayer(map: MapLibreMap, vehicles: VehicleMapPoint[]): boolean {
   if (!map.isStyleLoaded()) return false;
   ensureVehicleLayers(map);
   const source = map.getSource(VEHICLE_SOURCE_ID) as GeoJSONSource | undefined;
   source?.setData(buildVehicleFeatureCollection(vehicles));
-  for (const layerId of [VEHICLE_HALO_CASING_LAYER, VEHICLE_HALO_LAYER, VEHICLE_CHEVRON_LAYER, VEHICLE_LABEL_LAYER]) {
-    if (map.getLayer(layerId)) map.moveLayer(layerId);
-  }
+  raiseVehicleLayersIfNeeded(map);
   return true;
 }
 
 export function bindVehicleLayerSelection(map: MapLibreMap, onSelect: (vehicleId: string) => void): () => void {
   const layers = [VEHICLE_CHEVRON_LAYER, VEHICLE_HALO_LAYER];
+  let attached = false;
+  let disposed = false;
+
   const handleClick = (event: MapLayerMouseEvent) => {
     const feature = event.features?.[0];
     const vehicleId = feature?.properties?.vehicleId;
@@ -333,19 +449,38 @@ export function bindVehicleLayerSelection(map: MapLibreMap, onSelect: (vehicleId
     map.getCanvas().style.cursor = "";
   };
 
-  for (const layer of layers) {
-    map.on("click", layer, handleClick);
-    map.on("mouseenter", layer, handleEnter);
-    map.on("mouseleave", layer, handleLeave);
-  }
+  const attach = () => {
+    if (attached || disposed || !map.getLayer(VEHICLE_CHEVRON_LAYER)) return;
+    attached = true;
+    for (const layer of layers) {
+      map.on("click", layer, handleClick);
+      map.on("mouseenter", layer, handleEnter);
+      map.on("mouseleave", layer, handleLeave);
+    }
+  };
 
-  return () => {
+  const detach = () => {
+    if (!attached) return;
+    attached = false;
     for (const layer of layers) {
       map.off("click", layer, handleClick);
       map.off("mouseenter", layer, handleEnter);
       map.off("mouseleave", layer, handleLeave);
     }
     map.getCanvas().style.cursor = "";
+  };
+
+  if (map.isStyleLoaded()) attach();
+  else map.once("load", attach);
+
+  const onVehicleLayerReady = () => attach();
+  map.on("data", onVehicleLayerReady);
+
+  return () => {
+    disposed = true;
+    map.off("load", attach);
+    map.off("data", onVehicleLayerReady);
+    detach();
   };
 }
 

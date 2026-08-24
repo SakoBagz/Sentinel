@@ -2,9 +2,8 @@
 
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import { type Map as MapLibreMap } from "maplibre-gl";
 import { Pause, Play, Radio, Search, Square, TriangleAlert } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { z } from "zod";
 
 import { AuditPanel } from "@/components/audit-panel";
@@ -15,17 +14,17 @@ import { VehicleInspectField } from "@/components/vehicle-inspect-field";
 import { createFailure, ensureAuthSession, failureTypes, getMetrics, getMission, getRun, getRunSnapshot, Mission, pauseRun, resumeRun, Run, RunMetrics, startRun, stopRun, FailureType } from "@/lib/api";
 import {
   communicationsTone,
-  createOpsMap,
   fitCoordinates,
+  focusMapOnPoint,
   OPS_ROUTE_PAINT,
   OPS_TRAIL_PAINT,
   bindVehicleLayerSelection,
+  syncLineLayers,
   syncVehicleLayer,
-  updateLineGeoJson,
-  updateWhenStyleReady,
   type OpsLine,
   type VehicleMapPoint,
 } from "@/lib/ops-map";
+import { useOpsMap, useSyncWhenStyleReady } from "@/hooks/use-ops-map";
 import { LiveEvent, MissionState, VehicleTelemetry, useLiveTelemetry } from "@/stores/live-telemetry";
 
 const envelopeSchema = z.object({
@@ -52,59 +51,49 @@ type LiveMapProps = {
 
 function LiveMap({ vehicles, history, plannedRoutes, callsigns, selectedVehicleId, onSelect }: LiveMapProps) {
   const node = useRef<HTMLDivElement>(null);
-  const map = useRef<MapLibreMap | null>(null);
+  const { mapRef: map, ready } = useOpsMap(node);
   const fitted = useRef(false);
   const focusedVehicle = useRef<string | null>(null);
 
-  useEffect(() => {
-    if (!node.current || map.current) return;
-    const instance = createOpsMap(node.current);
-    map.current = instance;
-    return () => {
-      instance.remove();
-      map.current = null;
-      fitted.current = false;
-      focusedVehicle.current = null;
-    };
-  }, []);
+  const vehiclePoints = useMemo<VehicleMapPoint[]>(
+    () =>
+      Object.values(vehicles).map((telemetry) => ({
+        vehicleId: telemetry.vehicleId,
+        longitude: telemetry.longitude,
+        latitude: telemetry.latitude,
+        headingDeg: telemetry.headingDeg,
+        callsign: callsigns[telemetry.vehicleId] ?? telemetry.vehicleId.slice(0, 8),
+        tone: communicationsTone(telemetry.communicationsState),
+        selected: selectedVehicleId ? selectedVehicleId === telemetry.vehicleId : false,
+      })),
+    [vehicles, selectedVehicleId, callsigns],
+  );
 
   useEffect(() => {
+    if (!ready) return;
     const instance = map.current;
     if (!instance) return;
     return bindVehicleLayerSelection(instance, onSelect);
-  }, [onSelect]);
+  }, [ready, map, onSelect]);
+
+  useSyncWhenStyleReady(
+    map,
+    (instance) => {
+      syncVehicleLayer(instance, vehiclePoints);
+      if (!fitted.current && vehiclePoints.length > 0) {
+        fitCoordinates(
+          instance,
+          vehiclePoints.map((point) => [point.longitude, point.latitude]),
+          { padding: 80, maxZoom: 13, duration: 0 },
+        );
+        fitted.current = true;
+      }
+    },
+    [ready, vehiclePoints],
+  );
 
   useEffect(() => {
-    const instance = map.current;
-    if (!instance) return;
-    const positions = Object.values(vehicles);
-    const points: VehicleMapPoint[] = positions.map((telemetry) => ({
-      vehicleId: telemetry.vehicleId,
-      longitude: telemetry.longitude,
-      latitude: telemetry.latitude,
-      headingDeg: telemetry.headingDeg,
-      callsign: callsigns[telemetry.vehicleId] ?? telemetry.vehicleId.slice(0, 8),
-      tone: communicationsTone(telemetry.communicationsState),
-      selected: selectedVehicleId ? selectedVehicleId === telemetry.vehicleId : false,
-    }));
-    const applyMarkers = () => {
-      syncVehicleLayer(instance, points);
-    };
-    if (!syncVehicleLayer(instance, points)) {
-      return updateWhenStyleReady(instance, applyMarkers);
-    }
-
-    if (!fitted.current && positions.length > 0) {
-      fitCoordinates(
-        instance,
-        positions.map((sample) => [sample.longitude, sample.latitude]),
-        { padding: 80, maxZoom: 13, duration: 0 },
-      );
-      fitted.current = true;
-    }
-  }, [vehicles, selectedVehicleId, callsigns]);
-
-  useEffect(() => {
+    if (!ready) return;
     const instance = map.current;
     if (!instance || !selectedVehicleId) {
       focusedVehicle.current = selectedVehicleId;
@@ -114,28 +103,24 @@ function LiveMap({ vehicles, history, plannedRoutes, callsigns, selectedVehicleI
     const focused = vehicles[selectedVehicleId];
     focusedVehicle.current = selectedVehicleId;
     if (!focused) return;
-    instance.easeTo({
-      center: [focused.longitude, focused.latitude],
-      zoom: Math.max(instance.getZoom(), 12.2),
-      duration: 450,
-      essential: true,
-    });
-  }, [selectedVehicleId, vehicles]);
+    focusMapOnPoint(instance, focused.longitude, focused.latitude, { minZoom: 12.2, duration: 450 });
+  }, [ready, selectedVehicleId, vehicles, map]);
 
-  useEffect(() => {
-    const instance = map.current;
-    if (!instance) return;
-    const updateLines = () => {
+  useSyncWhenStyleReady(
+    map,
+    (instance) => {
       const trails: OpsLine[] = Object.entries(history).map(([id, samples]) => ({
         id,
         coordinates: samples.map((sample) => [sample.longitude, sample.latitude]),
       }));
       const routes: OpsLine[] = Object.entries(plannedRoutes).map(([id, coordinates]) => ({ id, coordinates }));
-      updateLineGeoJson(instance, { sourceId: "sentinel-planned-routes", lines: routes, paint: OPS_ROUTE_PAINT });
-      updateLineGeoJson(instance, { sourceId: "sentinel-live-trails", lines: trails, paint: OPS_TRAIL_PAINT });
-    };
-    return updateWhenStyleReady(instance, updateLines);
-  }, [history, plannedRoutes]);
+      syncLineLayers(instance, [
+        { sourceId: "sentinel-planned-routes", lines: routes, paint: OPS_ROUTE_PAINT },
+        { sourceId: "sentinel-live-trails", lines: trails, paint: OPS_TRAIL_PAINT },
+      ]);
+    },
+    [ready, history, plannedRoutes],
+  );
 
   return <div className="map-canvas" ref={node} />;
 }
