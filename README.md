@@ -71,7 +71,7 @@ apps/web/          Next.js operator UI
 apps/api/          FastAPI modular monolith
 simulator/         Seeded simulation engine + network impairment
 docs/              Architecture, API, realtime, and product docs
-infrastructure/    Render / Vercel deployment notes
+infrastructure/    Optional container / host notes (local Docker Compose is primary)
 benchmark-results/ Measured local in-process benchmarks
 ```
 
@@ -122,13 +122,7 @@ Hardware and methodology are recorded under [`benchmark-results/`](benchmark-res
 | 500 | 15000 | ~27k | ~19 | 0 |
 | 1000 | 30000 | ~27k | ~38 | 0 |
 
-These measure the in-process simulator + sink, not Redis/Postgres/browser latency or cloud capacity. Re-run with `python3 scripts/benchmark.py`.
-
-## Deployment
-
-Reference layout: Next.js on **Vercel**, API + Postgres + Redis on **Render** (or equivalent).
-
-See [infrastructure/vercel/README.md](infrastructure/vercel/README.md) and [docs/DEPLOYMENT.md](docs/DEPLOYMENT.md).
+These measure the in-process simulator + sink, not Redis/Postgres/browser latency. Re-run with `python3 scripts/benchmark.py`.
 
 ## Documentation
 
@@ -144,7 +138,7 @@ See [infrastructure/vercel/README.md](infrastructure/vercel/README.md) and [docs
 
 Supported scenarios: search and rescue, wildfire monitoring, environmental surveys, infrastructure inspection, mapping, and communications relay.
 
-Sentinel is a **simulation** platform — not aerodynamics CFD, not a flight controller, and not a weapons or targeting system. Demo JWT auth illustrates role-based access and auditability; it is not a production identity provider.
+Sentinel is intended to run **locally** (Docker Compose or split processes). It is a **simulation** platform — not aerodynamics CFD, not a flight controller, and not a weapons or targeting system. Demo JWT auth illustrates role-based access and auditability; it is not a production identity provider.
 
 ## License
 

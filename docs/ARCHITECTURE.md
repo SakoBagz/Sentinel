@@ -115,21 +115,22 @@ mission planning, live operations, metrics, and replay remain usable.
 - Durable consumers use idempotent writes and can retry.
 - WebSocket clients reconnect with bounded exponential backoff and restore topics.
 - A backend cold start is presented as a recoverable service state in the UI.
-- Public limits are enforced server-side rather than by the browser.
+- Optional demo rate limits are enforced server-side rather than by the browser.
 
 ## Runtime profiles
 
-| Concern | Local engineering | Hosted profile |
+| Concern | Local (primary) | Notes |
 | --- | --- | --- |
-| Frontend | Next.js local | Vercel or equivalent Node host |
-| Backend | FastAPI local | Render or equivalent container host |
-| Durable data | PostgreSQL | Managed PostgreSQL |
-| Transient events | Redis/Valkey | Managed Redis/Valkey |
-| Maps | MapLibre + OpenFreeMap | same |
-| Scale | benchmark harness | bounded anonymous traffic |
+| Frontend | Next.js via Docker Compose or `npm run dev:web` | — |
+| Backend | FastAPI via Docker Compose or uvicorn | — |
+| Durable data | PostgreSQL | Compose service or local install |
+| Transient events | Redis/Valkey | Compose service or local install |
+| Maps | MapLibre + OpenFreeMap | same in any environment |
+| Scale | Local benchmark harness | Optional server-side demo rate limits |
 
 Provider URLs and credentials are environment configuration. They do not leak into
-domain logic.
+domain logic. The project is developed and demonstrated locally; optional container
+host notes live under `infrastructure/` if you later need them.
 
 ## Invariants
 
@@ -140,6 +141,6 @@ domain logic.
 5. Simulation state advances independently of communications delivery.
 6. Replay uses persisted telemetry only.
 7. Analysis has no mutation capability.
-8. Hosted limits are enforced in the backend.
+8. Optional demo rate limits are enforced in the backend when enabled.
 9. Per-run delivery and modeled-latency summaries are computed incrementally and
    persisted independently of telemetry downsampling.

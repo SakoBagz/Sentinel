@@ -1,41 +1,30 @@
-# Deploy Sentinel on Vercel (frontend)
+# Optional external hosting notes
 
-Sentinel's **Next.js UI** runs on Vercel. The **API, PostgreSQL, Redis, and simulator**
-must run elsewhere (Render is the reference backend in this repo). Vercel alone cannot
-host the full stack.
+Sentinel is developed and demonstrated **locally** via Docker Compose (see the root
+[README](../../README.md)). This folder documents an optional split if you later want
+the Next.js UI on a Node host and the API elsewhere. It is not required to use the
+project.
 
-## Architecture
+## Architecture (optional)
 
 ```text
-Browser → Vercel (Next.js) → Render API (FastAPI + sim)
+Browser → Next.js UI host → FastAPI + simulator host
                               ↓
                          PostgreSQL + Redis
 ```
 
 ## Prerequisites
 
-1. GitHub repo pushed and public (or connected to Vercel).
-2. A Render account (or another host for the API).
-3. Managed PostgreSQL and Redis (Render, Neon, Upstash, etc.).
+1. A host for the FastAPI container (`apps/api/Dockerfile`).
+2. Managed or self-hosted PostgreSQL and Redis.
+3. A Node host for `apps/web` (or keep the UI in Compose).
 
----
-
-## Step 1 — Deploy the backend (Render)
-
-1. In [Render](https://render.com), create a **PostgreSQL** database and a **Redis**
-   instance (or use external providers and copy connection URLs).
-2. Create a **Web Service** from this repo using
-   [`../render/render.yaml`](../render/render.yaml), or manually:
-   - **Runtime:** Docker
-   - **Dockerfile:** `./apps/api/Dockerfile`
-   - **Docker context:** repository root
-   - **Health check path:** `/api/health`
-3. Set environment variables on the API service:
+## API environment
 
 ```text
 APP_ENV=production
 PUBLIC_DEMO=true
-WEB_ORIGIN=https://YOUR-PROJECT.vercel.app
+WEB_ORIGIN=https://YOUR-UI-ORIGIN
 AUTH_SECRET=<generate-a-long-random-secret>
 DATABASE_URL=<postgres-connection-string>
 REDIS_URL=<redis-connection-string>
@@ -48,92 +37,44 @@ Generate a secret locally:
 openssl rand -hex 32
 ```
 
-4. Wait for deploy. Confirm health:
+Health check path: `/api/health`.
+
+`WEB_ORIGIN` must match the UI origin exactly (no trailing slash).
+
+## Frontend environment
+
+Build `apps/web` with:
 
 ```text
-https://YOUR-API.onrender.com/api/health
-```
-
-**Important:** `WEB_ORIGIN` must exactly match your final Vercel URL (no trailing slash).
-Update it after Vercel gives you a domain if you guessed wrong on the first pass.
-
----
-
-## Step 2 — Deploy the frontend (Vercel)
-
-### Option A — Vercel Dashboard (recommended)
-
-1. Go to [vercel.com/new](https://vercel.com/new) and import the GitHub repository.
-2. **Project settings:**
-   - **Framework Preset:** Next.js
-   - **Root Directory:** `apps/web`
-   - **Node.js Version:** 22.x (matches [`.nvmrc`](../../.nvmrc))
-3. **Environment variables** (Production + Preview):
-
-```text
-NEXT_PUBLIC_API_BASE_URL=https://YOUR-API.onrender.com
-NEXT_PUBLIC_WS_BASE_URL=wss://YOUR-API.onrender.com
+NEXT_PUBLIC_API_BASE_URL=https://YOUR-API-ORIGIN
+NEXT_PUBLIC_WS_BASE_URL=wss://YOUR-API-ORIGIN
 ```
 
 These are baked in at **build time**. Redeploy after changing them.
 
-4. Click **Deploy**.
+For same-origin local development, leave them empty and use the Next.js proxy
+(see root README).
 
-### Option B — Vercel CLI
+## Smoke test
 
-From the repository root:
-
-```bash
-npm i -g vercel
-cd apps/web
-vercel link
-vercel env add NEXT_PUBLIC_API_BASE_URL production
-vercel env add NEXT_PUBLIC_WS_BASE_URL production
-vercel --prod
-```
-
----
-
-## Step 3 — Wire CORS and smoke test
-
-1. Set Render `WEB_ORIGIN` to your live Vercel URL if it changed.
-2. Open the Vercel URL.
-3. Confirm **SENTINEL** landing loads.
-4. Click **Launch seeded run** → map and telemetry update.
-5. Inject a fault → audit panel shows `failure.inject`.
-6. Complete the run → open **Replay** and **Debrief**.
-
----
-
-## Custom domain (optional)
-
-1. Add the domain in Vercel → **Settings → Domains**.
-2. Update Render `WEB_ORIGIN` to `https://your-domain.com`.
-3. Redeploy the API service (or restart) so CORS picks up the new origin.
-
----
+1. Confirm UI loads.
+2. **Launch seeded run** → map and telemetry update.
+3. Inject a fault → audit panel shows `failure.inject`.
+4. Complete the run → open **Replay** and **Debrief**.
 
 ## Troubleshooting
 
 | Symptom | Fix |
 | --- | --- |
-| API calls fail / CORS errors | `WEB_ORIGIN` on Render must match the Vercel URL exactly. |
+| API calls fail / CORS errors | `WEB_ORIGIN` on the API must match the UI origin exactly. |
 | WebSocket never connects | Use `wss://` (not `ws://`) in `NEXT_PUBLIC_WS_BASE_URL`. |
-| Stale API URL after env change | Redeploy Vercel (NEXT_PUBLIC_* vars are build-time). |
-| Render cold start | First request after idle may take 30–60s; retry or use a keep-alive ping. |
+| Stale API URL after env change | Redeploy the UI (`NEXT_PUBLIC_*` vars are build-time). |
+| Cold start on free hosts | First request after idle may take 30–60s; retry. |
 | 401 on mutations | Browser auto-issues a demo JWT; ensure API `AUTH_SECRET` is set. |
 
----
+## Limits
 
-## Cost notes (reference layout)
-
-| Service | Typical free tier |
-| --- | --- |
-| Vercel | Hobby — Next.js frontend |
-| Render | Free web service (spins down on idle) |
-| PostgreSQL / Redis | Provider free tiers with storage limits |
-
-Hosted limits (`PUBLIC_DEMO=true`): 50 vehicles, 5 Hz telemetry, 5 runs per session.
+When `PUBLIC_DEMO=true`: 50 vehicles, 5 Hz telemetry, 5 runs per session.
 See [`docs/DEPLOYMENT.md`](../../docs/DEPLOYMENT.md).
 
-For a free-tier split, PostgreSQL can also come from Neon/Supabase and Redis from Upstash; the API still needs a long-running host for the simulator and WebSockets.
+Reference files: [`../render/render.yaml`](../render/render.yaml).

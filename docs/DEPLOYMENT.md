@@ -1,9 +1,9 @@
-# Sentinel deployment strategy
+# Sentinel runtime and environment notes
 
 The supported JavaScript runtime is pinned to Node 22.x in `.nvmrc`, CI, and the
 Dockerfiles. Node 24 is not the supported local runtime for this Next.js baseline.
 
-## Local profile
+## Local profile (primary)
 
 Docker Compose starts PostgreSQL, Redis/Valkey, the FastAPI service, and the Next.js
 application. The target workflow is:
@@ -17,26 +17,13 @@ installation; the container still listens on `5432`. Local mode defaults to a 10
 simulation tick, per-vehicle telemetry configured at 10 Hz, and 2 Hz durable
 persistence. These are configuration defaults, not an integrated capacity claim.
 
-## Hosted profile
-
-The reference zero-cost layout is:
-
-| Component | Provider/profile |
-| --- | --- |
-| Frontend | Vercel Hobby or equivalent Node host |
-| Backend | Render free web service or equivalent container host |
-| PostgreSQL | Managed PostgreSQL free tier |
-| Transient events | Managed Redis/Valkey free tier |
-| Maps | MapLibre GL JS + OpenFreeMap |
-| CI/CD | GitHub Actions |
-
-Provider adapters and environment variables keep substitutions possible if free tiers
-change. The core workflow must not depend on one paid service.
+Sentinel is intended to be run and demonstrated locally. Optional notes for external
+hosts remain under `infrastructure/` for reference only.
 
 ## Environment configuration
 
-`.env.example` contains placeholders only. Production values are injected by the host.
-Secrets are never committed, logged, or returned in health/errors.
+`.env.example` contains placeholders only. Runtime values come from the environment
+or Compose. Secrets are never committed, logged, or returned in health/errors.
 
 ```text
 APP_ENV=development
@@ -92,20 +79,19 @@ Deployment is blocked while required checks fail. Deployment configuration lives
 Structured logs and the built-in metrics surface provide service, mission, run,
 vehicle, event, and timing context without requiring a paid observability platform.
 
-Hosted database storage is limited. `scripts/cleanup_runs.py` supports dry-run
-retention review before older telemetry-heavy runs are removed. Automatic deletion is
-disabled for development data.
+Hosted database storage, when used, is limited. `scripts/cleanup_runs.py` supports
+dry-run retention review before older telemetry-heavy runs are removed. Automatic
+deletion is disabled for development data.
 
-## Deployment acceptance
+## Acceptance (local)
 
-From an anonymous browser, a user can open Sentinel, launch the seeded run, see moving
-vehicles and telemetry, inject an allowed failure, complete the run, open replay, and
-view metrics. CI exercises this path before deployment.
+From a browser against the local stack, a user can open Sentinel, launch the seeded
+run, see moving vehicles and telemetry, inject an allowed failure, complete the run,
+open replay, and view metrics. CI exercises this path against Compose.
 
 ## Implementation status
 
-- The API container runs Alembic before Uvicorn, keeping local Compose and hosted
-  container startup behavior aligned.
+- The API container runs Alembic before Uvicorn, keeping local Compose startup aligned.
 - `scripts/seed_demo.py` uses the same seeded-run endpoint as the landing page.
 - `scripts/cleanup_runs.py` is dry-run by default for retention review.
 - CI checks the migration chain on SQLite and exercises the browser golden path against
