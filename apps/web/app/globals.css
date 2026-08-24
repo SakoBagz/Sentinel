@@ -265,7 +265,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
 .maplibregl-ctrl-attrib a { color: var(--muted) !important; }
 .maplibregl-popup-content { padding: 8px 10px !important; border: 1px solid var(--line-strong); border-radius: 4px !important; background: rgba(10, 11, 13, .96) !important; color: var(--ink) !important; font-size: 11px !important; box-shadow: var(--shadow) !important; }
 .maplibregl-popup-tip { border-top-color: rgba(10, 11, 13, .96) !important; }
-.maplibregl-marker { cursor: pointer; }
+.maplibregl-marker { cursor: pointer; transition: none !important; }
 
 .sentinel-vehicle-marker {
   position: relative;
@@ -274,7 +274,7 @@ button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible
   display: grid;
   place-items: center;
   opacity: .95;
-  transition: opacity var(--duration-ui) var(--ease-out), transform var(--duration-press) var(--ease-out);
+  transition: opacity var(--duration-ui) var(--ease-out);
 }
 .sentinel-vehicle-marker.selected,
 .sentinel-vehicle-marker.show-label { opacity: 1; z-index: 2; }

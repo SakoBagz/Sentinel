@@ -2,7 +2,7 @@
 
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import { Marker, type Map as MapLibreMap } from "maplibre-gl";
+import { type Map as MapLibreMap } from "maplibre-gl";
 import { useEffect, useRef } from "react";
 
 import type { ReplayVehicle } from "@/lib/replay";
@@ -11,10 +11,12 @@ import {
   createOpsMap,
   fitCoordinates,
   OPS_REPLAY_TRAIL_PAINT,
+  bindVehicleLayerSelection,
+  syncVehicleLayer,
   updateLineGeoJson,
   updateWhenStyleReady,
-  upsertVehicleMarker,
   type OpsLine,
+  type VehicleMapPoint,
 } from "@/lib/ops-map";
 
 export function ReplayMap({
@@ -32,7 +34,6 @@ export function ReplayMap({
 }) {
   const node = useRef<HTMLDivElement>(null);
   const map = useRef<MapLibreMap | null>(null);
-  const markers = useRef<Record<string, Marker>>({});
   const fitted = useRef(false);
   const focusedVehicle = useRef<string | null>(null);
 
@@ -43,11 +44,16 @@ export function ReplayMap({
     return () => {
       instance.remove();
       map.current = null;
-      markers.current = {};
       fitted.current = false;
       focusedVehicle.current = null;
     };
   }, []);
+
+  useEffect(() => {
+    const instance = map.current;
+    if (!instance) return;
+    return bindVehicleLayerSelection(instance, onSelect);
+  }, [onSelect]);
 
   useEffect(() => {
     const instance = map.current;
@@ -66,30 +72,26 @@ export function ReplayMap({
   useEffect(() => {
     const instance = map.current;
     if (!instance) return;
-    const activeIds = new Set<string>();
+    const points: VehicleMapPoint[] = [];
     for (const telemetry of current) {
       if (telemetry.latitude === null || telemetry.longitude === null) continue;
-      activeIds.add(telemetry.vehicle_id);
-      upsertVehicleMarker({
-        map: instance,
-        markers: markers.current,
+      points.push({
         vehicleId: telemetry.vehicle_id,
         longitude: telemetry.longitude,
         latitude: telemetry.latitude,
-        callsign: callsigns[telemetry.vehicle_id] ?? telemetry.vehicle_id.slice(0, 8),
         headingDeg: telemetry.heading_deg ?? 0,
+        callsign: callsigns[telemetry.vehicle_id] ?? telemetry.vehicle_id.slice(0, 8),
         tone: "neutral",
         selected: selectedVehicleId ? selectedVehicleId === telemetry.vehicle_id : false,
-        onSelect: () => onSelect(telemetry.vehicle_id),
       });
     }
-    for (const [vehicleId, marker] of Object.entries(markers.current)) {
-      if (!activeIds.has(vehicleId)) {
-        marker.remove();
-        delete markers.current[vehicleId];
-      }
+    const applyMarkers = () => {
+      syncVehicleLayer(instance, points);
+    };
+    if (!syncVehicleLayer(instance, points)) {
+      return updateWhenStyleReady(instance, applyMarkers);
     }
-  }, [current, selectedVehicleId, callsigns, onSelect]);
+  }, [current, selectedVehicleId, callsigns]);
 
   useEffect(() => {
     const instance = map.current;
