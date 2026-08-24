@@ -2,20 +2,22 @@
 
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import { Marker, type Map as MapLibreMap } from "maplibre-gl";
-import { useEffect, useRef } from "react";
+import { useEffect, useMemo, useRef } from "react";
 
 import type { ReplayVehicle } from "@/lib/replay";
 import type { TelemetrySample } from "@/lib/api";
 import {
-  createOpsMap,
+  filterValidCoordinates,
   fitCoordinates,
+  focusMapOnPoint,
+  groupSamplesIntoLines,
   OPS_REPLAY_TRAIL_PAINT,
-  updateLineGeoJson,
-  updateWhenStyleReady,
-  upsertVehicleMarker,
-  type OpsLine,
+  bindVehicleLayerSelection,
+  syncLineLayers,
+  syncVehicleLayer,
+  type VehicleMapPoint,
 } from "@/lib/ops-map";
+import { useOpsMap, useSyncWhenStyleReady } from "@/hooks/use-ops-map";
 
 export function ReplayMap({
   samples,
@@ -31,67 +33,59 @@ export function ReplayMap({
   onSelect: (vehicleId: string) => void;
 }) {
   const node = useRef<HTMLDivElement>(null);
-  const map = useRef<MapLibreMap | null>(null);
-  const markers = useRef<Record<string, Marker>>({});
+  const { mapRef: map, ready } = useOpsMap(node);
   const fitted = useRef(false);
   const focusedVehicle = useRef<string | null>(null);
 
-  useEffect(() => {
-    if (!node.current || map.current) return;
-    const instance = createOpsMap(node.current);
-    map.current = instance;
-    return () => {
-      instance.remove();
-      map.current = null;
-      markers.current = {};
-      fitted.current = false;
-      focusedVehicle.current = null;
-    };
-  }, []);
+  const vehiclePoints = useMemo<VehicleMapPoint[]>(
+    () =>
+      current
+        .filter((telemetry) => telemetry.latitude !== null && telemetry.longitude !== null)
+        .map((telemetry) => ({
+          vehicleId: telemetry.vehicle_id,
+          longitude: telemetry.longitude!,
+          latitude: telemetry.latitude!,
+          headingDeg: telemetry.heading_deg ?? 0,
+          callsign: callsigns[telemetry.vehicle_id] ?? telemetry.vehicle_id.slice(0, 8),
+          tone: "neutral" as const,
+          selected: selectedVehicleId ? selectedVehicleId === telemetry.vehicle_id : false,
+        })),
+    [current, selectedVehicleId, callsigns],
+  );
+
+  const trailLines = useMemo(() => groupSamplesIntoLines(samples), [samples]);
+
+  const fitCoordinatesList = useMemo(
+    () =>
+      filterValidCoordinates(
+        samples
+          .filter((sample) => sample.latitude !== null && sample.longitude !== null)
+          .map((sample) => [sample.longitude!, sample.latitude!] as const),
+      ),
+    [samples],
+  );
 
   useEffect(() => {
-    const instance = map.current;
-    if (!instance || samples.length === 0 || fitted.current) return;
-    const coordinates = samples
-      .filter((sample) => sample.latitude !== null && sample.longitude !== null)
-      .map((sample) => [sample.longitude!, sample.latitude!] as [number, number]);
-    if (coordinates.length === 0) return;
-    const applyFit = () => {
-      fitCoordinates(instance, coordinates, { padding: 70, maxZoom: 13, duration: 0 });
-      fitted.current = true;
-    };
-    return updateWhenStyleReady(instance, applyFit);
-  }, [samples]);
-
-  useEffect(() => {
+    if (!ready) return;
     const instance = map.current;
     if (!instance) return;
-    const activeIds = new Set<string>();
-    for (const telemetry of current) {
-      if (telemetry.latitude === null || telemetry.longitude === null) continue;
-      activeIds.add(telemetry.vehicle_id);
-      upsertVehicleMarker({
-        map: instance,
-        markers: markers.current,
-        vehicleId: telemetry.vehicle_id,
-        longitude: telemetry.longitude,
-        latitude: telemetry.latitude,
-        callsign: callsigns[telemetry.vehicle_id] ?? telemetry.vehicle_id.slice(0, 8),
-        headingDeg: telemetry.heading_deg ?? 0,
-        tone: "neutral",
-        selected: selectedVehicleId ? selectedVehicleId === telemetry.vehicle_id : false,
-        onSelect: () => onSelect(telemetry.vehicle_id),
-      });
-    }
-    for (const [vehicleId, marker] of Object.entries(markers.current)) {
-      if (!activeIds.has(vehicleId)) {
-        marker.remove();
-        delete markers.current[vehicleId];
+    return bindVehicleLayerSelection(instance, onSelect);
+  }, [ready, map, onSelect]);
+
+  useSyncWhenStyleReady(
+    map,
+    (instance) => {
+      syncVehicleLayer(instance, vehiclePoints);
+      if (!fitted.current && fitCoordinatesList.length > 0) {
+        fitCoordinates(instance, fitCoordinatesList, { padding: 70, maxZoom: 13, duration: 0 });
+        fitted.current = true;
       }
-    }
-  }, [current, selectedVehicleId, callsigns, onSelect]);
+    },
+    [ready, vehiclePoints, fitCoordinatesList],
+  );
 
   useEffect(() => {
+    if (!ready) return;
     const instance = map.current;
     if (!instance || !selectedVehicleId) {
       focusedVehicle.current = selectedVehicleId || null;
@@ -100,38 +94,19 @@ export function ReplayMap({
     if (focusedVehicle.current === selectedVehicleId) return;
     const focused = current.find((sample) => sample.vehicle_id === selectedVehicleId);
     focusedVehicle.current = selectedVehicleId;
-    if (focused?.latitude == null || focused.longitude == null) return;
-    instance.easeTo({
-      center: [focused.longitude, focused.latitude],
-      zoom: Math.max(instance.getZoom(), 12),
-      duration: 350,
-      essential: true,
-    });
-  }, [selectedVehicleId, current]);
+    if (!focused || focused.latitude == null || focused.longitude == null) return;
+    focusMapOnPoint(instance, focused.longitude, focused.latitude, { minZoom: 12, duration: 350 });
+  }, [ready, selectedVehicleId, current, map]);
 
-  useEffect(() => {
-    const instance = map.current;
-    if (!instance) return;
-    const updateTrail = () => {
-      const byVehicle = new Map<string, TelemetrySample[]>();
-      for (const sample of samples) {
-        if (sample.latitude === null || sample.longitude === null) continue;
-        const history = byVehicle.get(sample.vehicle_id) ?? [];
-        history.push(sample);
-        byVehicle.set(sample.vehicle_id, history);
-      }
-      const lines: OpsLine[] = [...byVehicle.entries()].map(([id, history]) => ({
-        id,
-        coordinates: history.map((sample) => [sample.longitude!, sample.latitude!]),
-      }));
-      updateLineGeoJson(instance, {
-        sourceId: "sentinel-replay-trails",
-        lines,
-        paint: OPS_REPLAY_TRAIL_PAINT,
-      });
-    };
-    return updateWhenStyleReady(instance, updateTrail);
-  }, [samples]);
+  useSyncWhenStyleReady(
+    map,
+    (instance) => {
+      syncLineLayers(instance, [
+        { sourceId: "sentinel-replay-trails", lines: trailLines, paint: OPS_REPLAY_TRAIL_PAINT },
+      ]);
+    },
+    [ready, trailLines],
+  );
 
   return <div className="map-canvas" ref={node} />;
 }

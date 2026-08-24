@@ -60,8 +60,7 @@ services:
       context: .
       dockerfile: apps/web/Dockerfile
     environment:
-      NEXT_PUBLIC_API_BASE_URL: http://localhost:8000
-      NEXT_PUBLIC_WS_BASE_URL: ws://localhost:8000
+      API_PROXY_ORIGIN: http://api:8000
     ports:
       - "3000:3000"
     depends_on:

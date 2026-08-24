@@ -76,7 +76,8 @@ docker compose up -d --build
 ```
 
 Open [http://localhost:3000](http://localhost:3000). API health:
-[http://localhost:8000/api/health](http://localhost:8000/api/health).
+[http://localhost:8000/api/health](http://localhost:8000/api/health)
+(or same-origin via the UI proxy: [http://localhost:3000/api/health](http://localhost:3000/api/health)).
 
 Split local processes:
 

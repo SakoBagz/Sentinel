@@ -2,7 +2,7 @@
 
 import "maplibre-gl/dist/maplibre-gl.css";
 
-import { Marker, Popup, type Map as MapLibreMap } from "maplibre-gl";
+import { Marker, Popup } from "maplibre-gl";
 import { AlertTriangle, Check, MapPin, Play, Plus, Save, Trash2 } from "lucide-react";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { useRouter } from "next/navigation";
@@ -12,7 +12,8 @@ import { StatusBadge, statusTone } from "@/components/status-badge";
 import { addVehicle, addWaypoint, createRun, deleteWaypoint, generatePattern, getMission, Mission, updateMission, updateWaypoint, Waypoint } from "@/lib/api";
 import { scenarioLabel } from "@/lib/mission-catalog";
 import { evaluateMissionReadiness } from "@/lib/mission-readiness";
-import { createOpsMap, createWaypointMarkerElement, fitCoordinates, makeMarkerInteractive, OPS_ROUTE_PAINT, updateLineGeoJson, updateWhenStyleReady, type OpsLine } from "@/lib/ops-map";
+import { createWaypointMarkerElement, fitCoordinates, makeMarkerInteractive, OPS_ROUTE_PAINT, runWhenStyleReady, syncLineLayers, type OpsLine } from "@/lib/ops-map";
+import { useOpsMap, useSyncWhenStyleReady } from "@/hooks/use-ops-map";
 
 type Props = { missionId: string };
 
@@ -45,9 +46,9 @@ function ReadinessPanel({ readiness }: { readiness: ReturnType<typeof evaluateMi
 
 export function MissionPlanner({ missionId }: Props) {
   const mapNode = useRef<HTMLDivElement>(null);
-  const mapRef = useRef<MapLibreMap | null>(null);
   const selectedVehicleRef = useRef<string | null>(null);
   const missionRef = useRef<Mission | null>(null);
+  const reloadRef = useRef<(syncName?: boolean) => Promise<void>>(async () => undefined);
   const markersRef = useRef<Marker[]>([]);
   const fittedRef = useRef(false);
   const [mission, setMission] = useState<Mission | null>(null);
@@ -74,6 +75,8 @@ export function MissionPlanner({ missionId }: Props) {
     }
   }, [missionId]);
 
+  reloadRef.current = reload;
+
   useEffect(() => {
     reload(true).catch((reason: unknown) => setError(reason instanceof Error ? reason.message : "Unable to load mission"));
   }, [reload]);
@@ -84,6 +87,49 @@ export function MissionPlanner({ missionId }: Props) {
   const selectedWaypoint = mission?.waypoints.find((waypoint) => waypoint.id === selectedWaypointId) ?? null;
   const selectedVehicleDefinition = mission?.vehicles.find((vehicle) => vehicle.id === selectedVehicle) ?? null;
   const missionLoaded = mission !== null;
+  const { mapRef, ready: mapReady } = useOpsMap(mapNode, {
+    enabled: missionLoaded,
+    onReady: (map) => {
+      let styleLoaded = false;
+      map.once("load", () => {
+        styleLoaded = true;
+        setBasemapReady(true);
+        setBasemapError(false);
+      });
+      map.on("error", () => {
+        if (!styleLoaded) {
+          setBasemapError(true);
+          setBasemapReady(false);
+        }
+      });
+      map.on("click", async (event) => {
+        const vehicleId = selectedVehicleRef.current;
+        const currentMission = missionRef.current;
+        if (!vehicleId || !currentMission) {
+          setError("Select a UAV in the fleet roster before placing a waypoint.");
+          return;
+        }
+        const vehicleWaypoints = currentMission.waypoints.filter((item) => item.vehicle_id === vehicleId);
+        setBusy(true);
+        setError(null);
+        try {
+          await addWaypoint(currentMission.id, {
+            vehicle_id: vehicleId,
+            sequence: vehicleWaypoints.length,
+            latitude: event.lngLat.lat,
+            longitude: event.lngLat.lng,
+            altitude_m: 100,
+            action: "SURVEY",
+          });
+          await reloadRef.current();
+        } catch (reason: unknown) {
+          setError(reason instanceof Error ? reason.message : "Unable to add waypoint");
+        } finally {
+          setBusy(false);
+        }
+      });
+    },
+  });
   const nameDirty = mission !== null && name.trim() !== mission.name;
   const hasUnsavedChanges = nameDirty || waypointDirty;
   const fleetVehicleIds = new Set(mission?.vehicles.map((vehicle) => vehicle.id));
@@ -100,53 +146,8 @@ export function MissionPlanner({ missionId }: Props) {
   const firstReadinessBlocker = readiness.checks.find((check) => !check.ready);
 
   useEffect(() => {
-    if (!missionLoaded || !mapNode.current || mapRef.current) return;
-    const map = createOpsMap(mapNode.current);
-    let styleLoaded = false;
-    map.once("load", () => {
-      styleLoaded = true;
-      setBasemapReady(true);
-      setBasemapError(false);
-    });
-    map.on("error", () => {
-      if (!styleLoaded) {
-        setBasemapError(true);
-        setBasemapReady(false);
-      }
-    });
-    map.on("click", async (event) => {
-      const vehicleId = selectedVehicleRef.current;
-      const currentMission = missionRef.current;
-      if (!vehicleId || !currentMission) {
-        setError("Select a UAV in the fleet roster before placing a waypoint.");
-        return;
-      }
-      const vehicleWaypoints = currentMission.waypoints.filter((item) => item.vehicle_id === vehicleId);
-      setBusy(true);
-      setError(null);
-      try {
-        await addWaypoint(currentMission.id, {
-          vehicle_id: vehicleId,
-          sequence: vehicleWaypoints.length,
-          latitude: event.lngLat.lat,
-          longitude: event.lngLat.lng,
-          altitude_m: 100,
-          action: "SURVEY",
-        });
-        await reload();
-      } catch (reason: unknown) {
-        setError(reason instanceof Error ? reason.message : "Unable to add waypoint");
-      } finally {
-        setBusy(false);
-      }
-    });
-    mapRef.current = map;
-    return () => { map.remove(); mapRef.current = null; };
-  }, [missionLoaded, reload]);
-
-  useEffect(() => {
     const map = mapRef.current;
-    if (!map || !mission) return;
+    if (!mapReady || !map || !mission) return;
     for (const marker of markersRef.current) marker.remove();
     markersRef.current = mission.waypoints.map((waypoint) => {
       const callsign = mission.vehicles.find((vehicle) => vehicle.id === waypoint.vehicle_id)?.callsign ?? "Unassigned UAV";
@@ -188,9 +189,9 @@ export function MissionPlanner({ missionId }: Props) {
         );
         fittedRef.current = true;
       };
-      updateWhenStyleReady(map, applyFit);
+      runWhenStyleReady(map, applyFit);
     }
-  }, [mission]);
+  }, [mapReady, mapRef, mission]);
 
   useEffect(() => {
     for (const marker of markersRef.current) {
@@ -200,10 +201,10 @@ export function MissionPlanner({ missionId }: Props) {
     }
   }, [selectedWaypointId, mission]);
 
-  useEffect(() => {
-    const map = mapRef.current;
-    if (!map || !mission) return;
-    const updateRoutes = () => {
+  useSyncWhenStyleReady(
+    mapRef,
+    (map) => {
+      if (!mission) return;
       const byVehicle = new Map<string, Waypoint[]>();
       for (const waypoint of [...mission.waypoints].sort((left, right) => left.sequence - right.sequence)) {
         if (!waypoint.vehicle_id) continue;
@@ -213,14 +214,10 @@ export function MissionPlanner({ missionId }: Props) {
         id,
         coordinates: waypoints.map((item) => [item.longitude, item.latitude]),
       }));
-      updateLineGeoJson(map, {
-        sourceId: "sentinel-planner-routes",
-        lines,
-        paint: OPS_ROUTE_PAINT,
-      });
-    };
-    return updateWhenStyleReady(map, updateRoutes);
-  }, [mission]);
+      syncLineLayers(map, [{ sourceId: "sentinel-planner-routes", lines, paint: OPS_ROUTE_PAINT }]);
+    },
+    [mapReady, mission],
+  );
 
   const saveMission = async () => {
     if (!name.trim()) {
